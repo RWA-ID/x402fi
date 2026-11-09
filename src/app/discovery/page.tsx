@@ -53,7 +53,7 @@ export default async function Discovery() {
                   </td>
                   <td className="px-4 py-3 font-mono text-xs"><span className="mr-1.5 rounded bg-card px-1.5 py-0.5">{i.metadata.method}</span>{path}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{ceiling ? `Up to ${formatUsd(a.amount)}` : formatUsd(a.amount)}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{a.payTo.slice(0, 6)}…{a.payTo.slice(-4)}{i.metadata.pricing === "contract" ? <span className="block font-sans text-ink-3">contract</span> : null}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{a.payTo.slice(0, 6)}…{a.payTo.slice(-4)}{i.metadata.pricing === "contract" ? <span className="block font-sans text-ink-3">contract</span> : i.metadata.pricing === "native" ? <span className="block font-sans text-ink-3">paid directly</span> : null}</td>
                   <td className="px-4 py-3 font-mono text-xs">{i.metadata.payeeName ?? "—"}</td>
                 </tr>
               );

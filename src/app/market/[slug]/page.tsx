@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { listingBySlug, type PublicService } from "@/lib/server/queries";
+import { listingBySlug, nativeBaseUrl, type PublicService } from "@/lib/server/queries";
+import { nativeUrl, probeNative } from "@/lib/server/native";
+import { priorsRecord } from "@/lib/server/priors";
+import { PriorsBadge } from "@/components/PriorsBadge";
 import { payeeStatus } from "@/lib/server/payee";
 import { formatUsd } from "@/lib/x402/money";
 import { priceLabel } from "@/lib/gateway/services";
@@ -39,11 +42,24 @@ export default async function ListingPage({ params }: P) {
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
   const gateway = `${origin}/g/${l.slug}`;
-  const [payee, profile] = await Promise.all([
-    payeeStatus({ identityName: l.identityName, payTo: l.payTo, origin, slug: l.slug }),
-    listingProfile(l),
-  ]);
   const live = l.services.filter((s) => s.status === "live");
+  // Native endpoints: the seller's own x402 URL, probed for its live price and payTo.
+  const base = await nativeBaseUrl(l);
+  const natives = base ? live.filter((s) => s.pricing === "native") : [];
+  const probes = new Map(
+    await Promise.all(natives.map(async (s) => {
+      const url = nativeUrl(base!, s.path, s.exampleRequest);
+      return [s.id, { url, probe: await probeNative(url, s.method, s.exampleBody) }] as const;
+    })),
+  );
+  const allNative = live.length > 0 && natives.length === live.length;
+  // Buyers of a native listing contact the seller's own origin, so that is what its payee name must list.
+  const payeeOrigin = base && allNative ? new URL(base).origin : origin;
+  const [payee, profile, priors] = await Promise.all([
+    payeeStatus({ identityName: l.identityName, payTo: l.payTo, origin: payeeOrigin, slug: l.slug }),
+    listingProfile(l),
+    priorsRecord(l.payTo),
+  ]);
 
   return (
     <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
@@ -71,6 +87,8 @@ export default async function ListingPage({ params }: P) {
           <div className="mt-3 space-y-3">
             {live.map((s) => {
               const ex = examplePath(s);
+              const nat = probes.get(s.id);
+              if (s.pricing === "native" && nat) return <NativeEndpoint key={s.id} s={s} url={nat.url} probe={nat.probe} />;
               return (
                 <section key={s.id} className="card overflow-hidden">
                   <div className="grid grid-cols-[1fr_auto] items-start gap-4 p-5">
@@ -96,7 +114,7 @@ export default async function ListingPage({ params }: P) {
                       <pre className="mt-2 overflow-x-auto font-mono text-[0.75rem]">{s.exampleResponse}</pre>
                     </details>
                   )}
-                  {l.status === "live" && (
+                  {l.status === "live" && s.pricing !== "native" && (
                     <div className="border-t border-line px-5 py-4">
                       <TryIt
                         slug={l.slug}
@@ -121,13 +139,18 @@ export default async function ListingPage({ params }: P) {
             <dl className="mt-3 divide-y divide-line text-sm">
               <Row k="Currency" v="USDG (Paxos), on Robinhood Chain" />
               <Row k="Payout wallet" v={<a className="font-mono underline-offset-2 hover:underline" href={addressUrl(l.payTo)} target="_blank" rel="noreferrer">{l.payTo.slice(0, 6)}…{l.payTo.slice(-4)}</a>} />
-              {live.some((s) => s.pricing !== "free") && <Row k="Paid calls" v={l.calls.toLocaleString()} />}
+              {live.some((s) => s.pricing !== "free" && s.pricing !== "native") && <Row k="Paid calls" v={l.calls.toLocaleString()} />}
               <Row k="Endpoints" v={`${live.length} live${l.hasFree ? ", incl. free" : ""}`} />
               {l.dailyCapAtomic && <Row k="Daily limit" v={formatUsd(l.dailyCapAtomic)} />}
             </dl>
-            <p className="mt-4 text-xs text-ink-3">Buyers pay no gas, and are only charged when the service answers successfully.</p>
+            <p className="mt-4 text-xs text-ink-3">
+              {allNative
+                ? "Paid directly to the seller over x402: x402Fi lists this service but never handles its payments."
+                : "Buyers pay no gas, and are only charged when the service answers successfully."}
+            </p>
           </div>
           <PayeeBadge status={payee} />
+          <PriorsBadge record={priors} />
         </aside>
       </div>
     </div>
@@ -167,6 +190,40 @@ function ProfileLink({ href, label, verified, icon }: { href: string; label: str
         <span className="text-xs text-ink-3">· by seller</span>
       )}
     </a>
+  );
+}
+
+/** A native endpoint: the seller's own x402 URL, paid directly; price and payee read from its 402. */
+function NativeEndpoint({ s, url, probe }: { s: PublicService; url: string; probe: Awaited<ReturnType<typeof probeNative>> }) {
+  const curl = s.method === "GET"
+    ? `curl -i "${url}"`
+    : `curl -i -X ${s.method} "${url}" \\\n  -H 'content-type: application/json' \\\n  -d '${(s.exampleBody ?? "{}").replace(/'/g, "'\\''")}'`;
+  return (
+    <section className="card overflow-hidden">
+      <div className="grid grid-cols-[1fr_auto] items-start gap-4 p-5">
+        <div className="min-w-0">
+          <h3 className="font-medium">{s.name}</h3>
+          {(s.summary || (probe.ok && probe.quote.description)) && <p className="mt-1 text-sm text-ink-2">{s.summary || (probe.ok ? probe.quote.description : "")}</p>}
+          <p className="mt-2 break-all font-mono text-xs text-ink-3"><span className="mr-2 rounded bg-card px-1.5 py-0.5 text-ink-2">{s.method}</span>{url}</p>
+        </div>
+        <div className="text-right">
+          <div className="display text-3xl">{probe.ok ? formatUsd(probe.quote.amount) : "—"}</div>
+          <div className="text-xs text-ink-3">paid directly to the seller</div>
+        </div>
+      </div>
+      <pre className="whitespace-pre-wrap break-all bg-forest px-5 py-4 font-mono text-[0.78rem] leading-relaxed text-forest-ink">{curl}{`
+
+# The seller answers 402 itself: sign USDG and retry with PAYMENT-SIGNATURE`}</pre>
+      <div className="border-t border-line px-5 py-3 text-xs text-ink-3">
+        {probe.ok ? (
+          <>Read live from the seller&apos;s 402: {formatUsd(probe.quote.amount)} USDG on Robinhood Chain to <span className="font-mono">{probe.quote.payTo.slice(0, 6)}…{probe.quote.payTo.slice(-4)}</span>
+            {probe.quote.payeeName && <> · payee name <span className="font-mono">{probe.quote.payeeName}</span></>}
+            {probe.quote.networks.length > 1 && <> · also accepts {probe.quote.networks.filter((n) => n !== "eip155:4663" && n !== "robinhood").join(", ")}</>}.</>
+        ) : (
+          <span className="text-warn">Couldn&apos;t read the seller&apos;s price right now ({probe.reason}).</span>
+        )}
+      </div>
+    </section>
   );
 }
 

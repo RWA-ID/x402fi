@@ -1,6 +1,6 @@
 import { usdToAtomic, MIN_PRICE_ATOMIC } from "@/lib/x402/money";
 
-export type Pricing = "free" | "fixed" | "quote" | "contract";
+export type Pricing = "free" | "fixed" | "quote" | "contract" | "native";
 
 export interface ServiceLike {
   id: string;
@@ -107,6 +107,8 @@ export function labelFromPath(prefix: string, requestPath: string): string | nul
 /** Price label for people: "Free", "$0.01", "Up to $15.00". */
 export function priceLabel(s: Pick<ServiceLike, "pricing" | "priceAtomic" | "maxPriceAtomic">, format: (a: string) => string): string {
   if (s.pricing === "free") return "Free";
+  // Native endpoints are priced by the seller's own 402; pages show the probed price when they have it.
+  if (s.pricing === "native") return s.priceAtomic ? format(s.priceAtomic) : "Priced by the seller";
   if (s.pricing === "quote" || s.pricing === "contract") return s.maxPriceAtomic ? `Up to ${format(s.maxPriceAtomic)}` : "Priced per request";
   return s.priceAtomic ? format(s.priceAtomic) : "—";
 }

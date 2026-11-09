@@ -4,19 +4,20 @@ import { atomicToUsd, formatUsd } from "@/lib/x402/money";
 
 interface Svc {
   id: string; name: string; summary: string; method: string; path: string;
-  pricing: "free" | "fixed" | "quote" | "contract"; priceAtomic: string | null; quotePath: string | null; maxPriceAtomic: string | null;
-  exampleRequest: string | null; status: "live" | "paused";
+  pricing: "free" | "fixed" | "quote" | "contract" | "native"; priceAtomic: string | null; quotePath: string | null; maxPriceAtomic: string | null;
+  exampleRequest: string | null; exampleBody: string | null; status: "live" | "paused";
 }
 interface Form {
   name: string; summary: string; method: "GET" | "POST"; path: string;
-  pricing: "free" | "fixed" | "quote"; price: string; quotePath: string; maxPrice: string; exampleRequest: string;
+  pricing: "free" | "fixed" | "quote" | "native"; price: string; quotePath: string; maxPrice: string; exampleRequest: string; exampleBody: string;
 }
-const EMPTY: Form = { name: "", summary: "", method: "GET", path: "/", pricing: "fixed", price: "0.01", quotePath: "", maxPrice: "", exampleRequest: "" };
+const EMPTY: Form = { name: "", summary: "", method: "GET", path: "/", pricing: "fixed", price: "0.01", quotePath: "", maxPrice: "", exampleRequest: "", exampleBody: "" };
 
 const toForm = (s: Svc): Form => ({
   name: s.name, summary: s.summary, method: s.method as Form["method"], path: s.path, pricing: s.pricing === "contract" ? "quote" : s.pricing,
   price: s.priceAtomic ? atomicToUsd(s.priceAtomic) : "", quotePath: s.quotePath ?? "", maxPrice: s.maxPriceAtomic ? atomicToUsd(s.maxPriceAtomic) : "",
   exampleRequest: s.exampleRequest ?? "",
+  exampleBody: s.exampleBody ?? "",
 });
 
 export function EndpointsEditor({ listingId, slug, onChange }: { listingId: string; slug: string; onChange: () => void }) {
@@ -75,7 +76,7 @@ export function EndpointsEditor({ listingId, slug, onChange }: { listingId: stri
                 {s.name}
               </div>
               <div className="break-all font-mono text-xs text-ink-3">
-                {s.method} /g/{slug}{s.path === "/" ? "" : s.path} · {s.pricing === "free" ? "free" : s.pricing === "contract" ? `on-chain, up to ${s.maxPriceAtomic ? formatUsd(s.maxPriceAtomic) : "?"}` : s.pricing === "quote" ? `quoted, up to ${s.maxPriceAtomic ? formatUsd(s.maxPriceAtomic) : "?"}` : s.priceAtomic ? formatUsd(s.priceAtomic) : "?"}
+                {s.method} /g/{slug}{s.path === "/" ? "" : s.path} · {s.pricing === "native" ? `already x402, paid directly${s.priceAtomic ? ` (${formatUsd(s.priceAtomic)})` : ""}` : s.pricing === "free" ? "free" : s.pricing === "contract" ? `on-chain, up to ${s.maxPriceAtomic ? formatUsd(s.maxPriceAtomic) : "?"}` : s.pricing === "quote" ? `quoted, up to ${s.maxPriceAtomic ? formatUsd(s.maxPriceAtomic) : "?"}` : s.priceAtomic ? formatUsd(s.priceAtomic) : "?"}
               </div>
             </div>
             <div className="flex gap-1.5">
@@ -107,7 +108,7 @@ export function EndpointsEditor({ listingId, slug, onChange }: { listingId: stri
           <div>
             <span className="eyebrow">Pricing</span>
             <div className="mt-1.5 flex flex-wrap gap-2">
-              {([["free", "Free"], ["fixed", "Fixed price"], ["quote", "Quoted per request"]] as const).map(([k, l]) => (
+              {([["free", "Free"], ["fixed", "Fixed price"], ["quote", "Quoted per request"], ["native", "Already x402 (paid directly)"]] as const).map(([k, l]) => (
                 <button key={k} type="button" onClick={() => set("pricing", k)} className={`rounded-full border px-3 py-1.5 text-sm ${form.pricing === k ? "border-ink bg-ink text-bg" : "border-line text-ink-2"}`}>{l}</button>
               ))}
             </div>
@@ -119,7 +120,13 @@ export function EndpointsEditor({ listingId, slug, onChange }: { listingId: stri
               <Input label="Quote path" value={form.quotePath} onChange={(v) => set("quotePath", v)} error={errors.quotePath} placeholder="/quote/register" hint={'x402Fi GETs your API here (+ the rest of the path) and expects {"price":"5.00"} or {"amount":"5000000"}.'} />
             </div>
           )}
+          {form.pricing === "native" && (
+            <p className="rounded-lg bg-bg p-3 text-xs text-ink-2">Your endpoint at this path already answers 402 in USDG on Robinhood Chain. x402Fi reads its price and payTo when you save, lists it, and buyers pay you directly.</p>
+          )}
           <Input label="Example (optional)" value={form.exampleRequest} onChange={(v) => set("exampleRequest", v)} placeholder="/alice or ?q=1" />
+          {form.pricing === "native" && form.method === "POST" && (
+            <Input label="Example JSON body" value={form.exampleBody} onChange={(v) => set("exampleBody", v)} error={errors.exampleBody} placeholder='{"minutes": 2, "task": "..."}' />
+          )}
           <div className="flex gap-2">
             <button className="btn btn-primary" disabled={busy} onClick={save}>{busy ? "Saving…" : editing === "new" ? "Add endpoint" : "Save"}</button>
             <button className="btn btn-ghost" onClick={() => setEditing(null)}>Cancel</button>

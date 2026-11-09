@@ -41,7 +41,7 @@ async function withServices(rows: Array<Omit<PublicListing, "services" | "fromAt
     const mine = svc.filter((s) => s.listingId === r.id).map(({ quotePath: _q, createdAt: _c, updatedAt: _u, ...s }) => s);
     const live = mine.filter((s) => s.status === "live");
     const paid = live.filter((s) => s.pricing === "fixed" && s.priceAtomic).map((s) => BigInt(s.priceAtomic!));
-    const quoteFloors = live.filter((s) => s.pricing === "quote" || s.pricing === "contract").length;
+    const quoteFloors = live.filter((s) => s.pricing === "quote" || s.pricing === "contract" || s.pricing === "native").length;
     const min = paid.length ? paid.reduce((a, b) => (b < a ? b : a)) : null;
     return {
       ...r,
@@ -77,4 +77,14 @@ export async function listingBySlug(slug: string): Promise<PublicListing | null>
     .limit(1);
   if (!row) return null;
   return (await withServices([row]))[0];
+}
+
+/**
+ * The seller's base URL, but ONLY for a listing with live native endpoints, where buyers
+ * call that URL themselves. For proxied listings the upstream stays private.
+ */
+export async function nativeBaseUrl(listing: PublicListing): Promise<string | null> {
+  if (!listing.services.some((s) => s.status === "live" && s.pricing === "native")) return null;
+  const [row] = await db(await envAsync()).select({ u: listings.upstreamUrl }).from(listings).where(eq(listings.id, listing.id)).limit(1);
+  return row?.u ?? null;
 }

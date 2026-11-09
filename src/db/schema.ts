@@ -56,6 +56,8 @@ export const listings = sqliteTable(
  *  - fixed:  priceAtomic per call.
  *  - quote:  the seller's API names the price per request at
  *            upstream + quotePath + (path after the service prefix), capped by maxPriceAtomic.
+ *  - native: the seller's own x402 endpoint (listing.upstreamUrl + path), paid directly to the
+ *            seller; x402Fi reads its 402 (price, payTo, payee name) and never proxies or settles.
  *  - contract: an on-chain "label registrar" (e.g. HoodfiX402Registrar) prices the request
  *            with quote(label) and is settled by calling registerWithAuthorization(label, auth)
  *            instead of a plain USDG transfer. Admin-enabled only: x402Fi pays that gas.
@@ -70,12 +72,17 @@ export const services = sqliteTable(
     method: text("method").notNull().default("GET"),
     /** Path prefix under the listing, e.g. "/register". "/" matches everything. */
     path: text("path").notNull().default("/"),
-    pricing: text("pricing", { enum: ["free", "fixed", "quote", "contract"] }).notNull().default("fixed"),
+    pricing: text("pricing", { enum: ["free", "fixed", "quote", "contract", "native"] }).notNull().default("fixed"),
     priceAtomic: text("price_atomic"),
     quotePath: text("quote_path"),
     maxPriceAtomic: text("max_price_atomic"),
     /** For pricing "contract": JSON { address, kind: "label-registrar", labelSuffix? }. */
     contractConfig: text("contract_config"),
+    /**
+     * For pricing "native": the seller's endpoint already speaks x402 and is paid DIRECTLY
+     * (x402Fi only lists it). JSON body x402Fi sends when probing a POST endpoint's 402.
+     */
+    exampleBody: text("example_body"),
     exampleRequest: text("example_request"),
     exampleResponse: text("example_response"),
     sortOrder: integer("sort_order").notNull().default(0),

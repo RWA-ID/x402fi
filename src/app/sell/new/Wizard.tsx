@@ -5,7 +5,7 @@ import { useAccount } from "wagmi";
 import { getAddress, isAddress } from "viem";
 import { SignInGate } from "@/components/SignInGate";
 import { buildPaymentRequired } from "@/lib/x402/requirements";
-import { usdToAtomic, formatUsd, MIN_PRICE_ATOMIC, MIN_PRICE_LABEL } from "@/lib/x402/money";
+import { usdToAtomic, formatUsd, atomicToUsd, MIN_PRICE_ATOMIC, MIN_PRICE_LABEL } from "@/lib/x402/money";
 import { IdentityStep } from "./IdentityStep";
 import { Copy } from "@/components/Copy";
 
@@ -17,9 +17,13 @@ export interface Draft {
   upstreamUrl: string; method: "GET" | "POST"; exampleRequest: string;
   price: string; payTo: string; dailyCap: string;
   identityName: string;
+  /** The endpoint already charges with x402: x402Fi lists it, buyers pay the seller directly. */
+  native: boolean;
+  /** POST endpoints: the JSON body x402Fi sends to read the 402. */
+  exampleBody: string;
 }
 
-const EMPTY: Draft = { name: "", summary: "", description: "", category: "", upstreamUrl: "", method: "GET", exampleRequest: "", price: "0.01", payTo: "", dailyCap: "", identityName: "" };
+const EMPTY: Draft = { name: "", summary: "", description: "", category: "", upstreamUrl: "", method: "GET", exampleRequest: "", price: "0.01", payTo: "", dailyCap: "", identityName: "", native: false, exampleBody: "" };
 const KEY = "x402fi:draft";
 
 export function Wizard() {
@@ -40,7 +44,10 @@ export function Wizard() {
       if (!d.category) e.category = "Pick a category.";
       if (!/^https:\/\/[^\s]+\.[^\s]+/.test(d.upstreamUrl.trim())) e.upstreamUrl = "Paste the https:// address of your API.";
     }
-    if (s === 1) {
+    if (s === 1 && d.native) {
+      if (!isAddress(d.payTo.trim(), { strict: false })) e.payTo = "Read your endpoint's 402 first: the price and payout wallet come from it.";
+    }
+    if (s === 1 && !d.native) {
       try { const a = usdToAtomic(d.price); if (a < MIN_PRICE_ATOMIC) e.price = `Minimum is ${MIN_PRICE_LABEL}: settling a payment costs about half a cent in gas.`; } catch (err) { e.price = (err as Error).message; }
       if (!isAddress(d.payTo.trim(), { strict: false })) e.payTo = "Enter the wallet address that should receive USDG.";
       if (d.dailyCap.trim()) { try { usdToAtomic(d.dailyCap); } catch (err) { e.dailyCap = (err as Error).message; } }
@@ -122,6 +129,18 @@ function StepService({ d, set, errors }: StepProps) {
   return (
     <div className="space-y-6">
       <Heading title="Describe your service" sub="Tell buyers exactly what they get before they pay. This is what agents and people see in the marketplace." />
+      <div className="grid gap-3 sm:grid-cols-2">
+        {([
+          [false, "Put x402Fi in front of my API", "No code: paste your API's URL and set a price. x402Fi charges buyers and pays you."],
+          [true, "My endpoint already charges with x402", "It answers 402 in USDG on Robinhood Chain. x402Fi lists it; buyers pay you directly."],
+        ] as const).map(([n, t, sub]) => (
+          <button key={String(n)} type="button" onClick={() => set("native", n)}
+            className={`rounded-xl border p-4 text-left transition-colors ${d.native === n ? "border-ink bg-card" : "border-line hover:border-ink-3"}`}>
+            <div className="font-medium">{t}</div>
+            <div className="mt-1 text-sm text-ink-3">{sub}</div>
+          </button>
+        ))}
+      </div>
       <Field label="Service name" error={errors.name}>
         <input className="field" value={d.name} onChange={(e) => set("name", e.target.value)} placeholder="EUR/USD reference rates" maxLength={60} />
       </Field>
@@ -142,13 +161,18 @@ function StepService({ d, set, errors }: StepProps) {
             <option>POST</option>
           </select>
         </Field>
-        <Field label="Your API's URL" error={errors.upstreamUrl} hint="Your existing endpoint. x402Fi forwards paid calls here. Buyers never see it.">
+        <Field label={d.native ? "Your x402 endpoint's URL" : "Your API's URL"} error={errors.upstreamUrl} hint={d.native ? "Public: buyers call it and pay you directly. It must answer 402 with USDG on Robinhood Chain." : "Your existing endpoint. x402Fi forwards paid calls here. Buyers never see it."}>
           <input className="field" value={d.upstreamUrl} onChange={(e) => set("upstreamUrl", e.target.value)} placeholder="https://api.yourcompany.com/v1/rates" inputMode="url" />
         </Field>
       </div>
       <Field label="Example query (optional)" hint="Added to the URL in examples and in “Try it”, e.g. ?pair=EURUSD">
         <input className="field" value={d.exampleRequest} onChange={(e) => set("exampleRequest", e.target.value)} placeholder="?pair=EURUSD" />
       </Field>
+      {d.native && d.method === "POST" && (
+        <Field label="Example JSON body" hint="Sent once, unpaid, to read your 402. Shown to buyers as the example request.">
+          <textarea className="field min-h-24" value={d.exampleBody} onChange={(e) => set("exampleBody", e.target.value)} placeholder='{"minutes": 2, "task": "Summarize agent 437"}' spellCheck={false} />
+        </Field>
+      )}
       <Field label="Details (optional)" hint="Data sources, update frequency, response fields, terms of use.">
         <textarea className="field min-h-28" value={d.description} onChange={(e) => set("description", e.target.value)} maxLength={2000} />
       </Field>
@@ -157,6 +181,55 @@ function StepService({ d, set, errors }: StepProps) {
 }
 
 function StepPrice({ d, set, errors }: StepProps) {
+  if (d.native) return <NativePrice d={d} set={set} errors={errors} />;
+  return <FixedPrice d={d} set={set} errors={errors} />;
+}
+
+/** Native endpoints: price and payout are read from the seller's own 402, never typed. */
+function NativePrice({ d, set, errors }: StepProps) {
+  const [busy, setBusy] = useState(false);
+  const [res, setRes] = useState<null | { ok: true; quote: { amount: string; payTo: string; payeeName: string | null; networks: string[] } } | { ok: false; reason: string }>(null);
+  const url = (() => {
+    const ex = d.exampleRequest.trim();
+    return ex.startsWith("?") || ex.startsWith("/") ? d.upstreamUrl.replace(/\/$/, "") + ex : d.upstreamUrl;
+  })();
+  const read = async () => {
+    setBusy(true);
+    const r = await fetch("/api/listings/probe-native", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url, method: d.method, body: d.method === "POST" ? d.exampleBody || "{}" : null }) })
+      .then((r) => r.json() as Promise<NonNullable<typeof res>>).catch(() => ({ ok: false as const, reason: "Network error" }));
+    setRes(r); setBusy(false);
+    if (r.ok) { set("payTo", r.quote.payTo); set("price", atomicToUsd(r.quote.amount)); }
+  };
+  return (
+    <SignInGate why="Sign in to read your endpoint's price. The listing will belong to this wallet.">
+      {() => (
+        <div className="space-y-6">
+          <Heading title="Read your price from your 402" sub="Your endpoint already names its price and payout wallet. x402Fi calls it once, unpaid, and lists exactly what it says." />
+          <div className="card p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <code className="break-all font-mono text-sm">{d.method} {url}</code>
+              <button onClick={read} disabled={busy} className="btn btn-primary">{busy ? "Reading…" : res ? "Read again" : "Read my 402"}</button>
+            </div>
+            {res && (res.ok ? (
+              <dl className="mt-4 divide-y divide-line text-sm">
+                <div className="flex justify-between py-2"><dt className="text-ink-3">Price per call</dt><dd className="font-mono">{formatUsd(res.quote.amount)} USDG</dd></div>
+                <div className="flex justify-between gap-4 py-2"><dt className="text-ink-3">Paid to (your payTo)</dt><dd className="break-all font-mono">{res.quote.payTo}</dd></div>
+                <div className="flex justify-between py-2"><dt className="text-ink-3">Payee name in your 402</dt><dd className="font-mono">{res.quote.payeeName ?? "none"}</dd></div>
+                {res.quote.networks.length > 1 && <div className="flex justify-between py-2"><dt className="text-ink-3">Also accepts</dt><dd className="font-mono">{res.quote.networks.filter((n) => n !== "eip155:4663" && n !== "robinhood").join(", ")}</dd></div>}
+              </dl>
+            ) : <p className="mt-3 text-sm text-bad">{res.reason}</p>)}
+            {errors.payTo && !res?.ok && <p className="mt-3 text-sm text-bad">{errors.payTo}</p>}
+          </div>
+          <p className="rounded-lg bg-card p-4 text-sm text-ink-2">
+            Buyers pay you <strong>directly</strong>, through your own facilitator. x402Fi lists your endpoint, checks your payee name and shows your record; it never touches the payment and takes <strong>0%</strong>.
+          </p>
+        </div>
+      )}
+    </SignInGate>
+  );
+}
+
+function FixedPrice({ d, set, errors }: StepProps) {
   const { address } = useAccount();
   let atomic = 0n;
   try { atomic = usdToAtomic(d.price); } catch {}
@@ -237,11 +310,18 @@ function StepTest({ d }: { d: Draft }) {
               </div>
             )}
           </div>
+          {d.native ? (
+            <p className="rounded-lg bg-card p-4 text-sm text-ink-2">
+              Agents see <strong>your endpoint&apos;s own 402</strong>: x402Fi lists it and links to it, and buyers pay you directly.
+              The test above calls it once, unpaid; a 402 answer is what we expect.
+            </p>
+          ) : (
           <div>
             <h3 className="eyebrow">What an agent will see first</h3>
             <p className="mt-2 text-sm text-ink-2">Every unpaid call gets this price quote (HTTP 402) instead of your data:</p>
             <pre className="mt-3 max-h-80 overflow-auto rounded-lg bg-forest p-4 font-mono text-[0.75rem] text-forest-ink">{preview}</pre>
           </div>
+          )}
         </div>
       )}
     </SignInGate>
@@ -286,7 +366,7 @@ function StepLive({ d, onDone }: { d: Draft; onDone: () => void }) {
           <dl className="card divide-y divide-line text-sm">
             {[
               ["Name", d.name], ["Summary", d.summary], ["Category", d.category], ["Forwards to", `${d.method} ${d.upstreamUrl}`],
-              ["Price", `${d.price.startsWith("$") ? d.price : "$" + d.price} per call, in USDG`], ["Payout wallet", d.payTo], ["Daily limit", d.dailyCap ? `$${d.dailyCap}` : "None"],
+              ["Price", d.native ? `$${d.price} per call, read from your 402 (paid to you directly)` : `${d.price.startsWith("$") ? d.price : "$" + d.price} per call, in USDG`], ["Payout wallet", d.payTo], ["Daily limit", d.dailyCap ? `$${d.dailyCap}` : "None"],
               ["Named payee", d.identityName || "Not linked (optional)"],
             ].map(([k, v]) => (
               <div key={k} className="grid gap-1 px-5 py-3 sm:grid-cols-[10rem_1fr]">

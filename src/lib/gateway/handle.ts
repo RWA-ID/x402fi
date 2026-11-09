@@ -179,6 +179,13 @@ export async function handleGateway(req: Request, slug: string, path: string[]):
 
   if (service.pricing === "contract") return handleContract(req, e, d, listing, service, requestPath, resourceUrl);
 
+  // Native endpoints already speak x402 and are paid DIRECTLY: x402Fi only lists them.
+  // 307 keeps the method and body, so an x402 client following it pays the seller itself.
+  if (service.pricing === "native") {
+    const target = upstreamTarget(listing, requestPath, incoming.search);
+    return new Response(null, { status: 307, headers: { location: target.toString(), "access-control-allow-origin": "*", "x-x402fi-native": "paid directly to the seller" } });
+  }
+
   // Paid endpoints: price first (quoted prices are fetched again on the paid
   // request, so the signed amount must match the seller's current quote).
   const price = await priceOf(listing, service, requestPath, incoming.search);

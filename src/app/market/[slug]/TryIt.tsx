@@ -15,7 +15,12 @@ type Line = { t: string; tone?: "ok" | "bad" | "dim" };
  * `nameEntry`: a contract endpoint that sells a name. The buyer types it, the URL becomes
  * `/g/<slug><path>/<name>`, and the exact price is shown before the wallet asks to sign.
  */
-export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEntry }: { slug: string; method: string; pathAndQuery: string; pricing: "free" | "fixed" | "quote" | "contract"; priceLabel: string; nameEntry?: { suffix?: string } }) {
+export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEntry, onPaid }: {
+  slug: string; method: string; pathAndQuery: string; pricing: "free" | "fixed" | "quote" | "contract"; priceLabel: string;
+  nameEntry?: { suffix?: string };
+  /** Called with the parsed JSON response after a successful paid call (e.g. a registered name). */
+  onPaid?: (body: unknown) => void;
+}) {
   const [name, setName] = useState("");
   const { address, chainId, isConnected } = useAccount();
   const { open } = useAppKit();
@@ -82,6 +87,7 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
       const receipt = rh ? decodeHeader<SettleResponse>(rh) : undefined;
       push({ t: `200 OK · paid ${price} USDG`, tone: "ok" });
       setResult({ body: pretty(body), receipt, receiptPage: paid.headers.get("x-x402fi-receipt") ?? undefined });
+      if (onPaid) { try { onPaid(JSON.parse(body)); } catch { /* non-JSON response */ } }
     } catch (e) {
       push({ t: (e as Error).message.split("\n")[0], tone: "bad" });
     } finally {

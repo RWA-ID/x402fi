@@ -11,7 +11,8 @@ export interface ServiceInput {
   summary?: string;
   method?: string;
   path?: string;
-  pricing?: "free" | "fixed" | "quote";
+  pricing?: "free" | "fixed" | "quote" | "native";
+  exampleBody?: string | null;
   price?: string | null;
   quotePath?: string | null;
   maxPrice?: string | null;
@@ -50,7 +51,7 @@ export function validateService(i: ServiceInput, current?: Patch): { ok: true; v
     out.path = p;
   }
   if (i.pricing !== undefined) {
-    if (!["free", "fixed", "quote"].includes(i.pricing)) e.pricing = "Pick free, fixed or quoted.";
+    if (!["free", "fixed", "quote", "native"].includes(i.pricing)) e.pricing = "Pick free, fixed, quoted or already-x402.";
     out.pricing = i.pricing;
   }
   const money = (k: "price" | "maxPrice", v: string | null | undefined) => {
@@ -77,6 +78,11 @@ export function validateService(i: ServiceInput, current?: Patch): { ok: true; v
   }
   if (i.exampleRequest !== undefined) out.exampleRequest = s(i.exampleRequest).slice(0, 300) || null;
   if (i.exampleResponse !== undefined) out.exampleResponse = s(i.exampleResponse).slice(0, 4000) || null;
+  if (i.exampleBody !== undefined) {
+    const b = s(i.exampleBody);
+    if (b) { try { JSON.parse(b); } catch { e.exampleBody = "Must be valid JSON."; } }
+    out.exampleBody = b ? b.slice(0, 4000) : null;
+  }
   if (i.sortOrder !== undefined) out.sortOrder = Math.max(0, Math.min(999, Math.floor(Number(i.sortOrder) || 0)));
   if (i.status !== undefined) {
     if (!["live", "paused"].includes(i.status)) e.status = "live or paused.";

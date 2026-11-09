@@ -2,6 +2,8 @@ import { and, eq, ne } from "drizzle-orm";
 import { payments, services } from "@/db/schema";
 import { db, envAsync } from "@/lib/server/env";
 import { ownedListing, validateService, type ServiceInput } from "@/lib/server/services";
+import { nativeUrl, probeNative } from "@/lib/server/native";
+import { listings } from "@/db/schema";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -25,6 +27,13 @@ export async function PATCH(req: Request, { params }: Ctx) {
     where: and(eq(services.listingId, svc.listingId), eq(services.method, method), eq(services.path, path), ne(services.id, svc.id)),
   });
   if (clash) return Response.json({ errors: { path: `There is already a ${method} endpoint at ${path}.` } }, { status: 422 });
+  const merged = { ...svc, ...v.value };
+  if (merged.pricing === "native" && merged.status === "live") {
+    const l = await d.query.listings.findFirst({ where: eq(listings.id, svc.listingId), columns: { upstreamUrl: true } });
+    const p = await probeNative(nativeUrl(l!.upstreamUrl, merged.path, merged.exampleRequest), merged.method, merged.method === "POST" ? merged.exampleBody ?? "{}" : null, { fresh: true });
+    if (!p.ok) return Response.json({ errors: { path: `That endpoint's 402 could not be read: ${p.reason}` } }, { status: 422 });
+    v.value.priceAtomic = p.quote.amount;
+  }
   await d.update(services).set({ ...v.value, updatedAt: Math.floor(Date.now() / 1000) }).where(eq(services.id, svc.id));
   return Response.json({ ok: true });
 }
