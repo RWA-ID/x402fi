@@ -62,8 +62,11 @@ x402Fi packages that into a product businesses and institutions can use without 
 | **On-chain products** | A `contract` pricing mode settles by calling a seller contract (e.g. register a name and deliver it) in **one atomic transaction**. |
 | **Ledger and receipts** | Every paid attempt is recorded (settled, not charged, or API error). Each payment has a public receipt page with its transaction hash, and sellers can export a CSV. |
 | **Public facilitator** | `/api/facilitator/verify`, `/settle`, `/supported` for anyone building x402 on Robinhood Chain. |
-| **Discovery feed** | Bazaar-style JSON of every paid endpoint, for agents and indexers. |
-| **Listing wizard** | Five steps: service → price and payout → identity (optional) → connection test → publish. |
+| **Discovery feed** | Bazaar-style JSON of every paid endpoint for agents and indexers (`/api/discovery/resources`), with a readable view at [`/discovery`](https://x402fi.dev/discovery). |
+| **Native x402 listings** | Sellers whose endpoint already charges with x402 list it as is: x402Fi reads the price, `payTo` and payee name from their 402 and buyers pay the seller **directly**. x402Fi never proxies, settles or takes a fee on these. |
+| **Priors credit records** | Listings show the payout wallet's [Priors](https://priors.trade) record (ERC-8004 agent credit on Robinhood Chain): score, loans repaid, defaults. |
+| **HoodFi payee names** | A `*.hoodfi.eth` name, native to Robinhood Chain, can be the payee name: its records are written in one Robinhood Chain transaction, and sellers can register one in the wizard over x402. |
+| **Listing wizard** | Five steps: service → price and payout → identity (optional) → connection test → publish. Proxied or native endpoint; ENS or HoodFi payee name, with optional logo, website and X records written in the same transaction. |
 | **Dashboard** | Revenue, a 30-day chart, ledger, CSV export, pause, payout rotation, upstream secret rotation, profile and endpoint editing. |
 | **Wallet sign-in** | Sign-In with Ethereum (EIP-4361). Works with injected, WalletConnect, email and social wallets (Reown AppKit). |
 | **Light and dark themes** | Cream-and-forest design system, phone-first layout. |
@@ -170,8 +173,9 @@ Each endpoint (a "service" inside a listing) has a path prefix, a method and one
 | `fixed` | `priceAtomic` per call | USDG transfer to the listing's payout wallet, after the API returns 2xx | Seller |
 | `quote` | Seller API: `GET {upstream}{quotePath}{rest}` → `{"price":"5.00"}` or `{"amount":"5000000"}`, capped by a published ceiling, re-quoted on the paid request | Same as fixed | Seller |
 | `contract` | On-chain `quote(label)` on a "label registrar" contract | The contract call itself (`registerWithAuthorization`), atomic | x402Fi admin (x402Fi pays the gas) |
+| `native` | The seller's own 402, read by an unpaid probe (cached 10 min; re-checked when saved) | **None by x402Fi**: the buyer pays the seller directly; the gateway answers `307` to the seller's URL | Seller (signed in) |
 
-**Minimum price: $0.01.** Settling one payment costs x402Fi roughly $0.006 to $0.007 of gas on Robinhood Chain (measured on the first live payment), so a cent covers it. Enforced in the wizard, the endpoint editor, seller quotes and the API (`MIN_PRICE_ATOMIC`).
+**Minimum price: $0.01** for the modes x402Fi settles (`fixed`, `quote`). Settling one payment costs x402Fi roughly $0.006 to $0.007 of gas on Robinhood Chain (measured on the first live payment), so a cent covers it. Enforced in the wizard, the endpoint editor, seller quotes and the API (`MIN_PRICE_ATOMIC`).
 
 ## Verified Payee (x402 Identity)
 
@@ -184,7 +188,19 @@ x402Fi integrates the **x402 Identity Hub** and its **`payee-name`** extension (
    - optionally `org.x402.payto` for extra payees, e.g. `eip155:4663:<contract>` for contract endpoints
 3. The 402 carries `extensions.payee-name.info.name`, and the listing page runs [`@x402identity/payee`](https://www.npmjs.com/package/@x402identity/payee) `verifyPayee` (cached 10 minutes in KV). The badge is tri-state: **Verified**, **not confirmed** (with the reason) or **couldn't check right now**. A failed read is never shown as a failure.
 
-Profile fields are read from the same name: `avatar`, `url` (or `website`), `com.twitter` (or `com.x`, `X`, `x`, `twitter`). ENS keys are case-sensitive.
+Profile fields are read from the same name: `avatar`, `url` (or `website`), `com.twitter` (or `com.x`, `X`, `x`, `twitter`). ENS keys are case-sensitive. The wizard can write `avatar`, `url` and `com.twitter` in the same transaction as the payee records.
+
+Writing payee records **keeps** any existing `org.x402.origins` and `org.x402.payto` entries (widget-core's builder always rewrites `org.x402.payto`, so x402Fi merges first).
+
+**Native listings** are checked against the seller's own origin, because that is the origin buyers contact.
+
+### HoodFi names as payee names
+
+`*.hoodfi.eth` names live in HoodFi's L2Registry on Robinhood Chain (`0xf2bABA012244bdD7445129597350054E1B3aEe5C`), which inherits ENS's `TextResolver`, `AddrResolver` and `Multicallable`. Only the name's owner (or an approved address) sets its records. HoodFi's CCIP gateway serves any record on Ethereum, so the standard `payee-name` verifier works unchanged.
+
+- The wizard's **Use a HoodFi name** option writes `org.x402.origins`, the Robinhood Chain address record, `org.x402.payto` (merged) and optional profile records in **one `multicall` on Robinhood Chain** (gas in ETH on 4663). It checks ownership first. A simulated write succeeds from the owner and reverts from anyone else.
+- A seller without a name can register one in place, from $3 in USDG over x402, through the HoodFi listing.
+- The verifier's informational `parent_can_control` reads `true` for these names because it is computed from Ethereum mainnet's NameWrapper, where L2 subnames do not exist. It does not describe control on Robinhood Chain, so x402Fi does not surface it.
 
 ## On-chain settlement: HoodFi name registration
 
@@ -211,6 +227,7 @@ Any failure reverts all four, so the buyer is never charged without the name. Th
 - **Replay protection.** The authorization nonce is claimed in D1 under a unique index **before** the upstream is called, and USDG's `authorizationState` rejects reuse on-chain.
 - **Upstream secret.** Every forwarded paid call carries `X-X402Fi-Secret` (per listing, rotatable) so sellers can reject calls that bypass the paywall, plus `X-X402Fi-Payer`.
 - **SSRF guard** (`src/lib/ssrf.ts`). https only, port 443, no credentials, no `localhost`/`.internal`/etc. Private, link-local, CGNAT, documentation and multicast ranges are blocked in **every notation**, including IPv4-mapped (`::ffff:127.0.0.1`), IPv4-compatible and NAT64 IPv6. **Every A/AAAA answer** is resolved over DoH before fetching, redirects are not followed, and requests time out. Workers also run with `global_fetch_strictly_public`.
+- **Native probes** are unpaid, SSRF-guarded, time-limited, available only to signed-in sellers, and never send a payment header.
 - **Contract endpoints are admin-only** and capped at 600k gas per settlement, so nobody can point x402Fi's gas at an expensive contract.
 - **Logos are proxied server-side**, sniffed by magic bytes (PNG, JPEG, GIF, WebP only; no SVG), capped at 1 MB and served with `content-security-policy: default-src 'none'; sandbox` and `nosniff`. Viewing a listing never contacts the seller's host from the visitor's browser.
 - **Profile links** are https-only and rendered `rel="noopener noreferrer nofollow ugc"`; X links must be x.com/twitter.com profiles.
@@ -222,7 +239,7 @@ Any failure reverts all four, so the buyer is never charged without the name. Th
 
 ### Gateway
 
-`{METHOD} https://x402fi.dev/g/<slug>/<path>`. Standard x402 v2 as above. Status codes: `402` (pay), `200` (paid response), `400` (missing name for contract endpoints), `404` (unknown listing or path; lists the endpoints), `405` (wrong method; `Allow` header), `409` (name unavailable, with reason), `413` (body over 1 MB), `429` (seller's daily cap), `502` (upstream error; not charged), `503` (chain unreachable or paused; retry, not charged).
+`{METHOD} https://x402fi.dev/g/<slug>/<path>`. Standard x402 v2 as above. Status codes: `402` (pay), `200` (paid response), `307` (native endpoint: redirect to the seller's own URL, which the buyer pays directly), `400` (missing name for contract endpoints), `404` (unknown listing or path; lists the endpoints), `405` (wrong method; `Allow` header), `409` (name unavailable, with reason), `413` (body over 1 MB), `429` (seller's daily cap), `502` (upstream error; not charged), `503` (chain unreachable or paused; retry, not charged).
 
 ### Facilitator
 
@@ -234,7 +251,11 @@ Any failure reverts all four, so the buyer is never charged without the name. Th
 
 ### Discovery
 
-`GET /api/discovery/resources` returns one item per paid live endpoint: `resource`, `accepts`, `metadata` (`name`, `description`, `category`, `method`, `pricing`, `priceIsCeiling`, `payeeName`, `listing`, and for contract endpoints `settlement`, `contract`, `pathTemplate`).
+`GET /api/discovery/resources` returns one item per paid live endpoint: `resource`, `accepts`, `metadata` (`name`, `description`, `category`, `method`, `pricing`, `priceIsCeiling`, `payeeName`, `listing`; contract endpoints add `settlement: "contract"`, `contract`, `pathTemplate`; native endpoints add `settlement: "direct"`, with `resource` being the seller's own URL and `accepts` read from its live 402). Readable view: `/discovery`.
+
+### Listing helpers (signed-in sellers)
+
+`POST /api/listings/probe-native` `{ url, method, body }` reads a seller's own x402 endpoint once, unpaid, and returns its USDG / Robinhood Chain price, `payTo`, payee name and offered networks.
 
 ## Data model
 
@@ -244,10 +265,10 @@ D1 (SQLite) via Drizzle, schema in `src/db/schema.ts`, migrations in `migrations
 |---|---|
 | `sellers` | Wallets that signed in (checksummed address). |
 | `listings` | A project: name, summary, description, category, upstream base URL, payout wallet, payee name, upstream secret, daily cap, profile (logo, website, X), status. |
-| `services` | Endpoints of a listing: method, path, pricing (`free`/`fixed`/`quote`/`contract`), price, quote path, ceiling, contract config, examples, order, status. |
+| `services` | Endpoints of a listing: method, path, pricing (`free`/`fixed`/`quote`/`contract`/`native`), price, quote path, ceiling, contract config, examples (incl. the JSON body used to probe a native POST endpoint), order, status. |
 | `payments` | The ledger: listing, endpoint, payer, payee, amount, unique nonce, status (`pending`/`settled`/`settle_failed`/`upstream_failed`), tx hash, error, path, upstream status, latency. |
 
-KV stores SIWE nonces (10 min), payee verdicts (10 min; failures 60 s) and ENS profiles (10 min; failures 60 s).
+KV stores SIWE nonces (10 min), payee verdicts, ENS profiles, native-endpoint probes and Priors records (10 min each; failures 60 s).
 
 ## Project structure
 
@@ -255,22 +276,22 @@ KV stores SIWE nonces (10 min), payee verdicts (10 min; failures 60 s) and ENS p
 src/
   app/
     page.tsx                     landing page
-    learn/ institutions/ developers/ terms/ privacy/ disclaimer/
+    learn/ institutions/ developers/ discovery/ terms/ privacy/ disclaimer/
     market/                      marketplace + listing pages (TryIt)
-    sell/new/                    5-step listing wizard (Identity step embeds the x402 Identity widget)
+    sell/new/                    5-step listing wizard (proxied or native; ENS or HoodFi payee name)
     dashboard/                   seller dashboard + endpoint editor
     receipt/[id]/                public receipts
     g/[slug]/[[...path]]/        x402 gateway route
-    api/                         facilitator, discovery, auth, listings, services, dashboard, payments CSV, logo, rpc
-  components/                    header, footer, handshake explainer, cards, badges, wallet button, legal layout
+    api/                         facilitator, discovery, auth, listings (+ probe-native), services, dashboard, payments CSV, logo, rpc
+  components/                    header, footer, handshake explainer, cards, payee + Priors badges, wallet button, legal layout
   db/schema.ts                   Drizzle schema
   lib/
     chains.ts                    Robinhood Chain, USDG, coin type
-    x402/                        types, encoding, money, requirements, EIP-712, facilitator, contract settlement
+    x402/                        types, encoding, money, requirements, EIP-712, facilitator, contract settlement, native 402 parser
     gateway/                     handler + pure routing/quote helpers
-    server/                      env bindings, chain clients, session, queries, payee, profile, validation
-    client/                      wagmi/AppKit config, SIWE session hook, payee-record writer
-    ssrf.ts  profile.ts
+    server/                      env bindings, chain clients, session, queries, payee, profile, discovery, native probe, Priors, validation
+    client/                      wagmi/AppKit config, SIWE session hook, payee-record writers (ENS on Ethereum, HoodFi on Robinhood Chain)
+    ssrf.ts  profile.ts  priors.ts
 migrations/                      D1 SQL migrations
 scripts/                         seed-demo.mjs, seed-hoodfi.mjs, pay-demo.mjs
 test/                            Vitest unit tests
@@ -330,7 +351,7 @@ npm test           # Vitest
 npm run typecheck
 ```
 
-Unit tests cover the money math, the 402 shape, verification against signed authorizations (wrong amount, payee, expiry, reuse, balance, tampering, RPC failure = retryable), the SSRF guard (every blocked notation plus public controls), endpoint routing and quotes, label parsing, the price minimum and profile parsing.
+Unit tests cover the money math, the 402 shape, verification against signed authorizations (wrong amount, payee, expiry, reuse, balance, tampering, RPC failure = retryable), the SSRF guard (every blocked notation plus public controls), endpoint routing and quotes, label parsing, the price minimum, profile parsing, native 402 parsing (v1 and v2, header and body) and Priors record parsing.
 
 End-to-end checks that need no money: send a payment signed by a throwaway wallet with **no funds**. A healthy gateway answers `402 insufficient_funds`; a `503` means the chain was unreachable. A real paid test: `node --dns-result-order=ipv4first scripts/pay-demo.mjs` (run by the wallet owner; refuses anything above $0.01).
 
