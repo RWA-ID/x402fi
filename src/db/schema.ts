@@ -117,6 +117,10 @@ export const payments = sqliteTable(
     requestPath: text("request_path").notNull(),
     upstreamStatus: integer("upstream_status"),
     latencyMs: integer("latency_ms"),
+    /** sha256 hex of the paid response body, shown on the receipt. Null when the delivery scan is off. */
+    responseSha256: text("response_sha256"),
+    /** Delivery check result (JSON DeliveryCheck from lib/delivery). Internal review data. */
+    deliveryScan: text("delivery_scan"),
     createdAt: integer("created_at").notNull().$defaultFn(now),
   },
   (t) => [index("payments_listing_idx").on(t.listingId, t.createdAt), index("payments_payto_idx").on(t.payTo, t.createdAt)],

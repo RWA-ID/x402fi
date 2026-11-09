@@ -43,7 +43,7 @@ export async function GET() {
   return Response.json({
     serviceNames: Object.fromEntries(svc.map((s) => [s.id, s.name])),
     listings: mine.map(({ upstreamSecret: _s, textScan: _t, ...l }) => ({ ...l, revenueAtomic: String(per.get(l.id)?.revenue ?? 0), calls: per.get(l.id)?.calls ?? 0 })),
-    payments: recent,
+    payments: recent.map(({ deliveryScan: _d, ...p }) => p),
     daily: daily.map((r) => ({ day: r.day, revenueAtomic: String(r.revenue ?? 0), calls: r.calls ?? 0 })),
     totals: { revenueAtomic: String(totals[0]?.revenue ?? 0), calls: totals[0]?.calls ?? 0, failed: totals[0]?.failed ?? 0 },
   });

@@ -13,6 +13,8 @@ import { GET as demoEcho } from "@/app/api/demo/echo/route";
 import { allowedMethods, labelFromPath, matchService, parseQuote, quoteRequestPath } from "./services";
 import { parseContractConfig, quoteLabel, settleViaContract } from "@/lib/x402/contract";
 import { txUrl } from "@/lib/chains";
+import { checkDelivery, type DeliveryCheck } from "@/lib/delivery";
+import { scanMode } from "@/lib/textscan";
 
 /** Upstream URL for the built-in demo service; served in-process (a Worker cannot fetch its own workers.dev host). */
 export const DEMO_UPSTREAM = "internal:demo";
@@ -25,7 +27,7 @@ const HOP = new Set([
   "host", "cookie", "authorization", "content-length", "cf-connecting-ip", "x-forwarded-for", "x-real-ip",
   "payment-signature", "x-payment",
 ]);
-const EXPOSE = "PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-PAYMENT-RESPONSE, X-X402Fi-Receipt";
+const EXPOSE = "PAYMENT-REQUIRED, PAYMENT-RESPONSE, X-PAYMENT-RESPONSE, X-X402Fi-Receipt, X-X402Fi-Response-SHA256";
 
 const json = (status: number, body: unknown, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body, null, 2), {
@@ -257,13 +259,33 @@ export async function handleGateway(req: Request, slug: string, path: string[]):
   }
   const responseBody = await upstream.arrayBuffer();
 
+  // Delivery check (AgentWormhole rules) before any money moves. A scanner crash never
+  // blocks a sale: it is logged and the payment proceeds unchecked.
+  const deliveryMode = scanMode(e.DELIVERY_SCAN);
+  let delivery: DeliveryCheck | null = null;
+  if (deliveryMode !== "off") {
+    try {
+      delivery = checkDelivery({ status: upstream.status, contentType: upstream.headers.get("content-type"), body: new Uint8Array(responseBody) });
+    } catch (err) {
+      console.error(JSON.stringify({ event: "delivery_scan_error", paymentId: id, slug: listing.slug, error: (err as Error).message }));
+    }
+    if (delivery && delivery.decision !== "allow") {
+      console.warn(JSON.stringify({ event: "delivery_scan", paymentId: id, slug: listing.slug, mode: deliveryMode, decision: delivery.decision, codes: delivery.codes, truncated: delivery.truncated }));
+    }
+    if (deliveryMode === "block" && delivery?.decision === "refuse") {
+      await finish({ status: "upstream_failed", upstreamStatus: upstream.status, error: `delivery_refused:${delivery.codes.join(",")}`, responseSha256: delivery.sha256, deliveryScan: JSON.stringify(delivery) });
+      return json(502, { error: "The service's response failed x402Fi's delivery check, so it was withheld and you were not charged.", codes: delivery.codes });
+    }
+  }
+  const scanCols = delivery ? { responseSha256: delivery.sha256, deliveryScan: JSON.stringify(delivery) } : {};
+
   // Only now take the money.
   const settled: SettleResponse = await settlePayment(client, sw.wallet, sw.account, payment);
   if (!settled.success) {
-    await finish({ status: "settle_failed", upstreamStatus: upstream.status, error: settled.errorReason, txHash: settled.transaction || null });
+    await finish({ status: "settle_failed", upstreamStatus: upstream.status, error: settled.errorReason, txHash: settled.transaction || null, ...scanCols });
     return json(402, { error: "The payment could not be settled, so the response was withheld.", reason: settled.errorReason });
   }
-  await finish({ status: "settled", upstreamStatus: upstream.status, txHash: settled.transaction });
+  await finish({ status: "settled", upstreamStatus: upstream.status, txHash: settled.transaction, ...scanCols });
 
   const out = new Headers();
   upstream.headers.forEach((val, key) => {
@@ -274,6 +296,7 @@ export async function handleGateway(req: Request, slug: string, path: string[]):
   out.set("access-control-allow-origin", "*");
   out.set("access-control-expose-headers", EXPOSE);
   out.set("x-x402fi-receipt", `/receipt/${id}`);
+  if (delivery?.sha256) out.set("x-x402fi-response-sha256", delivery.sha256);
   return new Response(req.method === "HEAD" ? null : responseBody, { status: upstream.status, headers: out });
 }
 

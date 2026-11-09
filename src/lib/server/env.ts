@@ -16,6 +16,8 @@ export interface AppEnv {
   MAINNET_RPC_URL?: string;
   /** Var: listing text scan mode, "off" (default) | "flag" | "block". See lib/textscan. */
   LISTING_TEXT_SCAN?: string;
+  /** Var: paid-response check mode, "off" (default) | "flag" | "block". See lib/delivery. */
+  DELIVERY_SCAN?: string;
 }
 
 /** Read bindings via OpenNext. Never `process.env` on Workers for bindings. */

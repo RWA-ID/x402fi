@@ -32,6 +32,8 @@ export default async function Receipt({ params }: { params: Promise<{ id: string
     ["Paid to", <a key="t" href={addressUrl(p.payTo)} className="font-mono underline" target="_blank" rel="noreferrer">{p.payTo}</a>],
     ["Named payee", l?.identityName ?? "None"],
     ["Transaction", p.txHash ? <a key="x" href={txUrl(p.txHash)} className="break-all font-mono underline" target="_blank" rel="noreferrer">{p.txHash}</a> : "None"],
+    // sha256 of the delivered bytes: anyone holding the response can check it is what was paid for.
+    ...(p.responseSha256 ? [["Response SHA-256", <span key="h" className="break-all font-mono">{p.responseSha256}</span>] as [string, React.ReactNode]] : []),
   ];
   return (
     <div className="mx-auto max-w-2xl px-4 pt-10 sm:px-6">

@@ -43,6 +43,13 @@
       "when": 1794256041962,
       "tag": "0005_listing_text_scan",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794258858997,
+      "tag": "0006_payment_delivery_scan",
+      "breakpoints": true
     }
   ]
 }

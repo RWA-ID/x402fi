@@ -15,7 +15,8 @@
   ],
   "kv_namespaces": [{ "binding": "KV", "id": "0c3bba12b6744cf881abfb5760c8206f" }],
   // Listing text scan (AgentWormhole rules): "off" | "flag" (store + log, never block) | "block" (422 on refused text).
-  "vars": { "LISTING_TEXT_SCAN": "flag" }
+  // Paid-response check before settling (lib/delivery): same three modes; block = refused responses are not charged.
+  "vars": { "LISTING_TEXT_SCAN": "flag", "DELIVERY_SCAN": "flag" }
   // Secrets (wrangler secret put): SETTLEMENT_PRIVATE_KEY, SESSION_SECRET, ROBINHOOD_RPC_URL, MAINNET_RPC_URL.
   // Do NOT add them under "vars": a var shadows the secret of the same name.
 }
