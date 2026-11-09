@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "x402fi",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  // Never set workers_dev = false: the preview lives on *.workers.dev.
+  "workers_dev": true,
+  "preview_urls": true,
+  "routes": [{ "pattern": "x402fi.dev", "custom_domain": true }],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "observability": { "enabled": true },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "x402fi", "database_id": "9780c07d-2df6-4821-bedb-f28eb5c9296a", "migrations_dir": "migrations" }
+  ],
+  "kv_namespaces": [{ "binding": "KV", "id": "0c3bba12b6744cf881abfb5760c8206f" }]
+  // Secrets (wrangler secret put): SETTLEMENT_PRIVATE_KEY, SESSION_SECRET, ROBINHOOD_RPC_URL, MAINNET_RPC_URL.
+  // Do NOT add them under "vars": a var shadows the secret of the same name.
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `contract_config` text;
