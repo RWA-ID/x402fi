@@ -146,11 +146,6 @@ export function IdentityStep({ d, set }: { d: Draft; set: <K extends keyof Draft
                 }} />
             </div>
           </details>
-          <p className="rounded-lg bg-card p-3 text-xs text-ink-2">
-            Only the wallet that owns a HoodFi name can change its records. The parent name, hoodfi.eth, and the resolver that
-            serves HoodFi names on Ethereum are administered by HoodFi&apos;s 2-of-3 Safe, as with any name under a parent, so the
-            payee check reports the parent as able to control it.
-          </p>
         </div>
       )}
 

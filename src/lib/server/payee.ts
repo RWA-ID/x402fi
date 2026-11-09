@@ -7,7 +7,7 @@ import { envAsync } from "./env";
 
 export type PayeeStatus =
   | { state: "none" }
-  | { state: "verified"; name: string; checkedAt: string; parentCanControl?: boolean }
+  | { state: "verified"; name: string; checkedAt: string }
   | { state: "mismatch"; name: string; reason: string; detail?: unknown; checkedAt: string }
   /** A failed read. Never shown as "unverified": a throttle is not a denial. */
   | { state: "unknown"; name: string; reason: string; checkedAt: string };
@@ -29,7 +29,7 @@ export async function payeeStatus(opts: { identityName: string | null; payTo: st
     const v = verdicts?.[0];
     const checkedAt = new Date().toISOString();
     if (!v) status = { state: "unknown", name: opts.identityName, reason: "no-verdict", checkedAt };
-    else if (v.verdict === true) status = { state: "verified", name: opts.identityName, checkedAt, parentCanControl: (v as { parent_can_control?: boolean }).parent_can_control === true };
+    else if (v.verdict === true) status = { state: "verified", name: opts.identityName, checkedAt };
     else if (v.verdict === "inconclusive") status = { state: "unknown", name: opts.identityName, reason: v.reason, checkedAt };
     // The verifier reports a normalize() that THREW as "name-not-normalized" with
     // expected "(not normalizable)". Seen once in production (2026-11-08) for a valid
