@@ -8,6 +8,7 @@ import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { themeScript } from "@/components/ThemeToggle";
 import { wagmiConfig } from "@/lib/client/wagmi";
+import { SITE_URL, X_HANDLE } from "@/lib/share";
 
 const display = Instrument_Serif({ subsets: ["latin"], weight: "400", style: ["normal", "italic"], variable: "--font-display" });
 const body = Inter({ subsets: ["latin"], variable: "--font-body" });
@@ -17,6 +18,9 @@ export const metadata: Metadata = {
   title: { default: "x402Fi: get paid by AI agents", template: "%s · x402Fi" },
   description: "Turn any API into a paid service for AI agents. Per-call payments in USDG on Robinhood Chain, with verified payees and audit-ready receipts. Listing is free.",
   icons: { icon: "/icon.svg" },
+  // Lets pages write og:image / canonical as paths and still emit absolute URLs.
+  metadataBase: new URL(SITE_URL),
+  twitter: { site: `@${X_HANDLE}` },
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

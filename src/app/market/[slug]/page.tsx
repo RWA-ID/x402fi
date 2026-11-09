@@ -15,13 +15,26 @@ import { TryIt } from "./TryIt";
 import { listingProfile } from "@/lib/server/profile";
 import { ListingLogo } from "@/components/ListingLogo";
 import { parseContractConfig } from "@/lib/x402/contract";
+import { ShareOnX } from "@/components/ShareOnX";
+import { SITE_URL, X_HANDLE, sharePrice, shareText, xIntentUrl } from "@/lib/share";
 
 export const dynamic = "force-dynamic";
 type P = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: P): Promise<Metadata> {
   const l = await listingBySlug((await params).slug).catch(() => null);
-  return l ? { title: l.name, description: l.summary } : { title: "Not found" };
+  if (!l || l.status === "draft") return { title: "Not found" };
+  // openGraph and twitter REPLACE the root layout's, they do not merge: restate everything.
+  const path = `/market/${l.slug}`;
+  const image = { url: `/og/listing/${l.slug}`, width: 1200, height: 630, alt: `${l.name} on x402Fi` };
+  const title = `${l.name} · x402Fi`;
+  return {
+    title: l.name,
+    description: l.summary,
+    alternates: { canonical: path },
+    openGraph: { type: "website", siteName: "x402Fi", url: path, title, description: l.summary, images: [image] },
+    twitter: { card: "summary_large_image", site: `@${X_HANDLE}`, title, description: l.summary, images: [image] },
+  };
 }
 
 /** Example URL for an endpoint: its path plus the example ("/0x…/names" or "?q=1"). */
@@ -60,6 +73,8 @@ export default async function ListingPage({ params }: P) {
     listingProfile(l),
     priorsRecord(l.payTo),
   ]);
+  const shareUrl = `${SITE_URL}/market/${l.slug}`;
+  const post = shareText(l, sharePrice(l.services), profile.x?.value);
 
   return (
     <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
@@ -151,6 +166,7 @@ export default async function ListingPage({ params }: P) {
           </div>
           <PayeeBadge status={payee} />
           <PriorsBadge record={priors} />
+          {l.status === "live" && <ShareOnX text={post} url={shareUrl} intent={xIntentUrl(post, shareUrl)} />}
         </aside>
       </div>
     </div>
