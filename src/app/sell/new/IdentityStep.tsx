@@ -6,6 +6,7 @@ import { namehash, type Hex } from "viem";
 import { useAppKit } from "@reown/appkit/react";
 import { X402Widget } from "@x402identity/widget-react";
 import { useWritePayee } from "@/lib/client/useWritePayee";
+import { parseLogo, parseWebsite, parseXHandle } from "@/lib/profile";
 import type { Draft } from "./Wizard";
 import { Field } from "./Wizard";
 
@@ -34,6 +35,21 @@ export function IdentityStep({ d, set }: { d: Draft; set: <K extends keyof Draft
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
   const linkName = (n: string) => set("identityName", n.trim().toLowerCase());
+
+  // Optional public profile, written to the name in the same transaction.
+  const [prof, setProf] = useState({ avatar: "", url: "", x: "" });
+  const check = <T,>(f: () => T): { ok: true; v: T } | { ok: false; msg: string } => {
+    try { return { ok: true, v: f() }; } catch (e) { return { ok: false, msg: (e as Error).message }; }
+  };
+  const avatarCheck = check(() => parseLogo(prof.avatar));
+  const urlCheck = check(() => parseWebsite(prof.url));
+  const xCheck = check(() => parseXHandle(prof.x));
+  const profileOk = avatarCheck.ok && urlCheck.ok && xCheck.ok;
+  const profileRecords = {
+    avatar: prof.avatar.trim() || undefined, // stored as typed: ipfs:// stays ipfs://
+    url: urlCheck.ok ? urlCheck.v ?? undefined : undefined,
+    twitter: xCheck.ok ? xCheck.v ?? undefined : undefined,
+  };
 
   return (
     <div className="space-y-6">
@@ -109,13 +125,34 @@ export function IdentityStep({ d, set }: { d: Draft; set: <K extends keyof Draft
             <ul className="mt-3 space-y-1.5 font-mono text-[0.8rem] text-ink-2">
               <li>org.x402.origins ← adds {origin || "this site"}</li>
               <li>Robinhood Chain address (coin type 2147488311) ← {d.payTo || "your payout wallet"}</li>
+              {profileRecords.avatar && <li>avatar ← {profileRecords.avatar}</li>}
+              {profileRecords.url && <li>url ← {profileRecords.url}</li>}
+              {profileRecords.twitter && <li>com.twitter ← {profileRecords.twitter}</li>}
             </ul>
-            <p className="mt-3 text-sm text-ink-3">One Ethereum transaction. Existing origins on the name are kept.</p>
+            <p className="mt-3 text-sm text-ink-3">One Ethereum transaction. Existing origins and payees on the name are kept.</p>
+
+            <div className="mt-5 border-t border-line pt-4">
+              <div className="eyebrow">Public profile (optional)</div>
+              <p className="mt-1 text-sm text-ink-3">Shown on your listing with a verified mark, because only the name&apos;s owner can set these records. Leave blank to keep what the name already has.</p>
+              <div className="mt-3 grid gap-3">
+                {([
+                  ["avatar", "Logo (https:// or ipfs:// PNG, JPEG, WebP or GIF)", "https://yourco.com/logo.png", avatarCheck],
+                  ["url", "Website", "https://yourco.com", urlCheck],
+                  ["x", "X profile", "@yourco", xCheck],
+                ] as const).map(([k, label, ph, c]) => (
+                  <label key={k} className="block">
+                    <span className="text-sm text-ink-2">{label}</span>
+                    <input className="field mt-1" value={prof[k]} placeholder={ph} spellCheck={false} autoCapitalize="none" onChange={(e) => setProf((p) => ({ ...p, [k]: e.target.value }))} />
+                    {!c.ok && <span className="mt-1 block text-xs text-bad">{c.msg}</span>}
+                  </label>
+                ))}
+              </div>
+            </div>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <button
                 className="btn btn-primary"
-                disabled={!existing || !d.payTo || ["reading", "signing", "confirming"].includes(payee.state)}
-                onClick={() => (isConnected ? payee.write(existing.trim().toLowerCase(), origin, d.payTo) : open())}
+                disabled={!existing || !d.payTo || !profileOk || ["reading", "signing", "confirming"].includes(payee.state)}
+                onClick={() => (isConnected ? payee.write(existing.trim().toLowerCase(), origin, d.payTo, profileRecords) : open())}
               >
                 {payee.state === "reading" ? "Reading records…" : payee.state === "signing" ? "Confirm in wallet…" : payee.state === "confirming" ? "Waiting for Ethereum…" : payee.state === "written" ? "Written ✓" : "Write records"}
               </button>

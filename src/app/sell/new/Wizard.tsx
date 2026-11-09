@@ -7,6 +7,7 @@ import { SignInGate } from "@/components/SignInGate";
 import { buildPaymentRequired } from "@/lib/x402/requirements";
 import { usdToAtomic, formatUsd, MIN_PRICE_ATOMIC, MIN_PRICE_LABEL } from "@/lib/x402/money";
 import { IdentityStep } from "./IdentityStep";
+import { Copy } from "@/components/Copy";
 
 const STEPS = ["Service", "Price & payout", "Identity", "Test", "Go live"] as const;
 const CATEGORIES = ["Market data", "AI & agents", "Research", "Compliance & KYB", "Data feeds", "Developer tools", "Other"];
@@ -328,16 +329,3 @@ function withExample(upstream: string, example: string) {
   }
 }
 
-export function Copy({ label, value, hint }: { label: string; value: string; hint?: string }) {
-  const [ok, setOk] = useState(false);
-  return (
-    <div>
-      <div className="eyebrow">{label}</div>
-      <div className="mt-2 flex gap-2">
-        <code className="field flex-1 overflow-x-auto whitespace-nowrap">{value}</code>
-        <button className="btn btn-ghost" onClick={async () => { await navigator.clipboard.writeText(value); setOk(true); setTimeout(() => setOk(false), 1500); }}>{ok ? "Copied" : "Copy"}</button>
-      </div>
-      {hint && <p className="mt-1.5 text-sm text-ink-3">{hint}</p>}
-    </div>
-  );
-}

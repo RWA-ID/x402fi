@@ -72,7 +72,7 @@ export default function Developers() {
       </Section>
 
       <Section id="discovery" title="Discovery">
-        <p>Every live listing is published in a Bazaar-style feed that agents and indexers can crawl: <a className="font-mono underline" href="/api/discovery/resources">/api/discovery/resources</a>.</p>
+        <p>Every paid endpoint is published in a Bazaar-style feed that agents and indexers can crawl: <a className="font-mono underline" href="/api/discovery/resources">/api/discovery/resources</a> (JSON), with a readable view at <a className="underline" href="/discovery">/discovery</a>.</p>
       </Section>
 
       <Section id="payee" title="Verified payee">

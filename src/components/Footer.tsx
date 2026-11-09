@@ -4,7 +4,7 @@ import { LogoMark } from "./Logo";
 const cols = [
   { title: "Product", links: [["Marketplace", "/market"], ["List a service", "/sell/new"], ["Dashboard", "/dashboard"]] },
   { title: "Learn", links: [["How x402 works", "/learn"], ["For institutions", "/institutions"], ["Developers", "/developers"]] },
-  { title: "Open data", links: [["Discovery feed", "/api/discovery/resources"], ["Facilitator", "/developers#facilitator"], ["x402 Identity", "https://x402id.dev"]] },
+  { title: "Open data", links: [["Discovery feed", "/discovery"], ["Facilitator", "/developers#facilitator"], ["x402 Identity", "https://x402id.dev"]] },
   { title: "Legal", links: [["Terms of Service", "/terms"], ["Privacy Policy", "/privacy"], ["Disclaimer", "/disclaimer"], ["contact@x402fi.dev", "mailto:contact@x402fi.dev"]] },
 ];
 
