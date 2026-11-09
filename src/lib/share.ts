@@ -34,6 +34,22 @@ export function cardTagline(kind: ReturnType<typeof sharePrice>["kind"]): string
     : "For AI agents · USDG on Robinhood Chain";
 }
 
+/** Bump when the card's design changes, so every cached card is fetched again. */
+export const CARD_DESIGN = 2;
+
+/**
+ * A short version for a listing's card URL (?v=…): changes when anything the card draws
+ * changes (name, summary, category, prices, payee name, seller logo URL, design). A logo
+ * set on the payee name's ENS record is not included: that would need an ENS read per page.
+ */
+export function cardVersion(l: { name: string; summary: string; category: string; identityName: string | null; logoUrl: string | null; services: Svc[] }): string {
+  const p = sharePrice(l.services);
+  const key = JSON.stringify([CARD_DESIGN, l.name, l.summary, l.category, l.identityName, l.logoUrl, p.price, p.note]);
+  let h = 0x811c9dc5; // FNV-1a, 32-bit: a cache key, not a security property
+  for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(36);
+}
+
 /** X counts every link as 23 characters, whatever its length. */
 const X_LIMIT = 280;
 const X_URL_LEN = 23;

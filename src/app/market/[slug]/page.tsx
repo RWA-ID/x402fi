@@ -16,7 +16,7 @@ import { listingProfile } from "@/lib/server/profile";
 import { ListingLogo } from "@/components/ListingLogo";
 import { parseContractConfig } from "@/lib/x402/contract";
 import { ShareOnX } from "@/components/ShareOnX";
-import { SITE_URL, X_HANDLE, sharePrice, shareText, xIntentUrl } from "@/lib/share";
+import { SITE_URL, X_HANDLE, cardVersion, sharePrice, shareText, xIntentUrl } from "@/lib/share";
 
 export const dynamic = "force-dynamic";
 type P = { params: Promise<{ slug: string }> };
@@ -26,7 +26,8 @@ export async function generateMetadata({ params }: P): Promise<Metadata> {
   if (!l || l.status === "draft") return { title: "Not found" };
   // openGraph and twitter REPLACE the root layout's, they do not merge: restate everything.
   const path = `/market/${l.slug}`;
-  const image = { url: `/og/listing/${l.slug}`, width: 1200, height: 630, alt: `${l.name} on x402Fi` };
+  // X caches a card by its URL for days: the URL changes whenever what the card shows does.
+  const image = { url: `/og/listing/${l.slug}?v=${cardVersion(l)}`, width: 1200, height: 630, alt: `${l.name} on x402Fi` };
   const title = `${l.name} · x402Fi`;
   return {
     title: l.name,
