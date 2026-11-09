@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { USDG } from "@/lib/chains";
 
-export const metadata: Metadata = { title: "Developers", description: "x402 facilitator for Robinhood Chain, discovery feed and integration snippets." };
+export const metadata: Metadata = { title: "Developers", description: "x402 facilitator for Robinhood Chain, discovery feed, integration snippets, and how agents pay safely." };
 
 const verifySecret = `// Your API, behind the x402Fi gateway: reject calls that skip the paywall.
 app.use((req, res, next) => {
@@ -40,6 +40,47 @@ app.get("/rates", async (req, res) => {
   res.set("PAYMENT-RESPONSE", Buffer.from(JSON.stringify(s)).toString("base64")).json(data);
 });`;
 
+// Kept in step with scripts/pay-guarded.mjs and test/buyer-guard.test.ts (which runs this recipe offline).
+const guardedPay = `// npm install wormhole-x402 viem
+import { evmQuoteFromRequirements, guardEvmSigner } from "wormhole-x402/evm";
+import { inspectQuoteText } from "wormhole-x402/quotetext";
+
+const USDG = "${USDG.address}";
+
+// 1. Get the price. A 402 is the seller's text: scan it before a model reads it.
+const pr = await (await fetch(url)).json();                 // HTTP 402
+if (inspectQuoteText(pr).decision !== "allow") throw new Error("402 carries injected text");
+const req = pr.accepts.find((a) => a.network === "eip155:4663");
+
+// 2. Sign only through the guard. The quote comes from the 402, never from the model;
+//    the cap comes from you. Any other payee, amount, token or chain, a long-lived
+//    authorization, or any other signing request is refused.
+const wallet = guardEvmSigner(account, () => evmQuoteFromRequirements(req), {
+  spendPolicy: {
+    maxPerPayment: { [USDG]: "50000" },     // $0.05 per call
+    maxTotal:      { [USDG]: "5000000" },   // $5 over this wallet guard's life
+  },
+});
+const now = BigInt(Math.floor(Date.now() / 1000));
+const signature = await wallet.signTypedData({
+  domain: { name: req.extra.name, version: req.extra.version, chainId: 4663, verifyingContract: req.asset },
+  types: { TransferWithAuthorization: [ /* from, to, value, validAfter, validBefore, nonce */ ] },
+  primaryType: "TransferWithAuthorization",
+  message: { from: account.address, to: req.payTo, value: BigInt(req.amount),
+             validAfter: now - 60n, validBefore: now + BigInt(req.maxTimeoutSeconds), nonce },
+});
+
+// 3. Pay: the same request, with the signed authorization.
+const res = await fetch(url, { headers: { "PAYMENT-SIGNATURE": base64(JSON.stringify(
+  { x402Version: 2, resource: pr.resource, accepted: req, payload: { signature, authorization } })) } });
+
+// 4. Check what arrived before the model reads it.
+const bytes = new Uint8Array(await res.arrayBuffer());
+if (sha256hex(bytes) !== res.headers.get("x-x402fi-response-sha256")) throw new Error("not the response on the receipt");
+const text = new TextDecoder().decode(bytes);
+const body = (() => { try { return JSON.parse(text); } catch { return text; } })();
+if (inspectQuoteText(body).decision === "refuse") throw new Error("paid response carries injected text");`;
+
 const payeeExt = `// Name the payee in your 402 so agents can verify you (x402 payee-name extension)
 "extensions": { "payee-name": { "info": { "name": "yourco.402api.eth" } } }
 
@@ -53,7 +94,7 @@ export default function Developers() {
       <p className="eyebrow">Developers</p>
       <h1 className="display mt-3 text-5xl sm:text-6xl">x402 on Robinhood Chain, <span className="italic">open.</span></h1>
       <p className="mt-5 text-lg text-ink-2">
-        The no-code gateway covers most sellers. If you run your own server, use the same public facilitator and discovery feed.
+        The no-code gateway covers most sellers. If you run your own server, use the same public facilitator and discovery feed. Building an agent that pays? Start with <a className="underline" href="#paying-safely">paying safely</a>.
       </p>
 
       <Section id="gateway" title="Behind the gateway">
@@ -69,6 +110,26 @@ export default function Developers() {
           <li>GET  /api/facilitator/supported</li>
         </ul>
         <Code>{selfHost}</Code>
+      </Section>
+
+      <Section id="paying-safely" title="Paying safely (for agents)">
+        <p>
+          An agent that pays per call is spending real money on text written by strangers. Four checks keep it honest, using{" "}
+          <a className="underline" href="https://github.com/runningoffcode/agent-wormhole/tree/main/x402-guard" target="_blank" rel="noopener noreferrer">wormhole-x402</a>{" "}
+          by AgentWormhole: open source, offline, and Robinhood Chain USDG is in its trusted domains.
+        </p>
+        <ol className="mt-4 list-decimal space-y-2 pl-5">
+          <li><strong className="text-ink">Scan the 402 before a model reads it.</strong> Descriptions are written by the seller and can carry instructions aimed at your agent.</li>
+          <li><strong className="text-ink">Sign only through the guard.</strong> <code className="font-mono">guardEvmSigner</code> wraps your wallet so that the only thing it signs is the payment the 402 asked for: the quoted payee, amount, token and chain, for a short window. Everything else it refuses, including approvals and permits.</li>
+          <li><strong className="text-ink">Set a spending cap.</strong> If the seller is the attacker, a matching payment can still be for your whole balance. <code className="font-mono">spendPolicy</code> is the one control that needs your numbers, so it is off until you set it.</li>
+          <li><strong className="text-ink">Check what arrived.</strong> x402Fi puts the SHA-256 of every paid response on its receipt and in <code className="font-mono">X-X402Fi-Response-SHA256</code>; compare it with the bytes you got, and scan the text before your agent trusts it because it paid.</li>
+        </ol>
+        <Code>{guardedPay}</Code>
+        <p className="mt-3 text-sm">
+          Scan JSON responses as parsed values, as above: the scanner treats quoted text as someone describing an attack rather than making one, and in raw JSON every value is quoted.
+          A clean scan catches careless injections; it does not prove a seller is honest. The guard and the cap are what hold.
+          To check <em>who</em> you are paying, add the <a className="underline" href="#payee">verified payee</a> check.
+        </p>
       </Section>
 
       <Section id="discovery" title="Discovery">

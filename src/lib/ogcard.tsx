@@ -33,6 +33,8 @@ export interface ListingCard {
   payeeName: string | null;
   /** Footer line, e.g. "Paid per call by AI agents · USDG on Robinhood Chain". */
   tagline: string;
+  /** The listing's own logo as a data: URL (PNG/JPEG/GIF), shown beside its name. */
+  logo?: string | null;
 }
 
 export type CardFont = { name: string; data: ArrayBuffer; weight: 400 | 500; style: "normal" | "italic" };
@@ -62,7 +64,13 @@ export function renderListingCard(card: ListingCard, fonts: CardFont[]): ImageRe
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, justifyContent: "center", paddingBottom: 28 }}>
-          <div style={{ fontFamily: "Instrument Serif", fontSize: nameSize, lineHeight: 1, letterSpacing: -2 }}>{name}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
+            {card.logo && (
+              // eslint-disable-next-line @next/next/no-img-element -- satori renders plain <img>
+              <img src={card.logo} width={twoLines ? 104 : 128} height={twoLines ? 104 : 128} style={{ borderRadius: 24, objectFit: "cover", flexShrink: 0 }} alt="" />
+            )}
+            <div style={{ display: "flex", fontFamily: "Instrument Serif", fontSize: nameSize, lineHeight: 1, letterSpacing: -2, flexShrink: 1 }}>{name}</div>
+          </div>
           <div style={{ marginTop: twoLines ? 20 : 26, fontSize: twoLines ? 28 : 32, lineHeight: 1.3, color: C.ink2, maxWidth: 1000 }}>{clip(card.summary, twoLines ? 110 : 140)}</div>
         </div>
 

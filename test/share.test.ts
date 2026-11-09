@@ -57,9 +57,10 @@ describe("OG card", () => {
     const b = readFileSync(`public/fonts/${f.file}`);
     return { name: f.name, data: b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer, weight: f.weight, style: f.style };
   });
+  const jpg = `data:image/jpeg;base64,${readFileSync("test/fixtures/logo.jpg").toString("base64")}`;
   const cards = {
-    hoodfi: { name: "HoodFi Names", summary: "Look up and register hoodfi.eth names on Robinhood Chain.", category: "Developer tools", price: "Free", priceNote: "lookups · paid calls priced per request", payeeName: "hoodfi.402api.eth", tagline: cardTagline("free") },
-    long: { name: "AgentFuel Rug Check for Robinhood Chain Tokens and Pools", summary: "S".repeat(10) + " checks every new token for honeypots, mint authority, LP locks and owner privileges before your agent buys it, in one call.", category: "AI & agents", price: "$0.01", priceNote: "per call", payeeName: null, tagline: cardTagline("paid") },
+    hoodfi: { name: "HoodFi Names", summary: "Look up and register hoodfi.eth names on Robinhood Chain.", category: "Developer tools", price: "Free", priceNote: "lookups · paid calls priced per request", payeeName: "hoodfi.402api.eth", tagline: cardTagline("free"), logo: jpg },
+    long: { name: "AgentFuel Rug Check for Robinhood Chain Tokens and Pools", summary: "S".repeat(10) + " checks every new token for honeypots, mint authority, LP locks and owner privileges before your agent buys it, in one call.", category: "AI & agents", price: "$0.01", priceNote: "per call", payeeName: null, tagline: cardTagline("paid"), logo: jpg },
   };
   for (const [k, card] of Object.entries(cards)) {
     it(`renders a ${OG_SIZE.width}x${OG_SIZE.height} PNG (${k})`, async () => {

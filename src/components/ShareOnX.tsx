@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 
-/** Ready-to-post copy for X: open X's composer prefilled, or copy the text and link. */
+/** Ready-to-post copy for X: open X's composer prefilled with it, or copy just the link. */
 export function ShareOnX({ text, url, intent }: { text: string; url: string; intent: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -24,7 +24,7 @@ export function ShareOnX({ text, url, intent }: { text: string; url: string; int
           className="btn btn-ghost"
           onClick={async () => {
             try {
-              await navigator.clipboard.writeText(`${text}\n${url}`);
+              await navigator.clipboard.writeText(url);
               setCopied(true);
               setTimeout(() => setCopied(false), 1500);
             } catch {
@@ -32,7 +32,7 @@ export function ShareOnX({ text, url, intent }: { text: string; url: string; int
             }
           }}
         >
-          {copied ? "Copied" : "Copy text"}
+          {copied ? "Link copied" : "Copy link"}
         </button>
       </div>
     </div>
