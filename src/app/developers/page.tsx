@@ -96,6 +96,17 @@ export default function Developers() {
       <p className="mt-5 text-lg text-ink-2">
         The no-code gateway covers most sellers. If you run your own server, use the same public facilitator and discovery feed. Building an agent that pays? Start with <a className="underline" href="#paying-safely">paying safely</a>.
       </p>
+      <a
+        href="https://github.com/RWA-ID/x402fi"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-6 inline-flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm text-ink-2 hover:border-ink-3 hover:text-ink"
+      >
+        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="currentColor" aria-hidden>
+                <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.86 10.92c.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.37-3.87-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z" />
+              </svg>
+        x402Fi is open source (Apache-2.0): RWA-ID/x402fi
+      </a>
 
       <Section id="gateway" title="Behind the gateway">
         <p>Paid calls reach your API with two extra headers: <code className="font-mono">X-X402Fi-Secret</code> (from your listing) and <code className="font-mono">X-X402Fi-Payer</code>. Check the secret so the paywall can&apos;t be bypassed.</p>
@@ -125,6 +136,13 @@ export default function Developers() {
           <li><strong className="text-ink">Check what arrived.</strong> x402Fi puts the SHA-256 of every paid response on its receipt and in <code className="font-mono">X-X402Fi-Response-SHA256</code>; compare it with the bytes you got, and scan the text before your agent trusts it because it paid.</li>
         </ol>
         <Code>{guardedPay}</Code>
+        <p className="mt-3 text-sm">
+          The complete, runnable version is{" "}
+          <a className="font-mono underline" href="https://github.com/RWA-ID/x402fi/blob/main/scripts/pay-guarded.mjs" target="_blank" rel="noopener noreferrer">scripts/pay-guarded.mjs</a>
+          , and{" "}
+          <a className="font-mono underline" href="https://github.com/RWA-ID/x402fi/blob/main/test/buyer-guard.test.ts" target="_blank" rel="noopener noreferrer">test/buyer-guard.test.ts</a>{" "}
+          runs this recipe against x402Fi&apos;s own 402s, including the payments it must refuse.
+        </p>
         <p className="mt-3 text-sm">
           Scan JSON responses as parsed values, as above: the scanner treats quoted text as someone describing an attack rather than making one, and in raw JSON every value is quoted.
           A clean scan catches careless injections; it does not prove a seller is honest. The guard and the cap are what hold.

@@ -399,4 +399,6 @@ x402Fi is operated by **Only Buy Bitcoin LLC** under the laws of Delaware, USA. 
 - Privacy Policy: https://x402fi.dev/privacy
 - Disclaimer: https://x402fi.dev/disclaimer
 
-© 2026 Only Buy Bitcoin LLC. All rights reserved. Contact: contact@x402fi.dev
+## License
+
+Apache-2.0, see [LICENSE](LICENSE) and [NOTICE](NOTICE). © 2026 Only Buy Bitcoin LLC. Contact: contact@x402fi.dev
