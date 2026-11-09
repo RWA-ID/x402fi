@@ -28,7 +28,8 @@ export function PayeeBadge({ status }: { status: PayeeStatus }) {
       <p className="mt-2 text-ink-3">{body}</p>
       {status.state === "verified" && status.parentCanControl && (
         <p className="mt-2 text-xs text-ink-3">
-          Note: the parent of this name ({status.name.split(".").slice(1).join(".")}) can also change its records, so this check is as strong as that parent&apos;s operator.
+          The parent name ({status.name.split(".").slice(1).join(".")}) is administered by its operator, who could in principle change how
+          this name resolves. Day to day, only the name&apos;s owner sets its records.
         </p>
       )}
       <p className="mt-3 text-xs text-ink-3">Checked {new Date(status.checkedAt).toUTCString()} via the x402 payee-name spec.</p>
