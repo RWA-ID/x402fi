@@ -14,6 +14,8 @@ export interface AppEnv {
   ROBINHOOD_RPC_URL?: string;
   /** Secret: Ethereum mainnet RPC (Alchemy, server-only key) for ENS reads. */
   MAINNET_RPC_URL?: string;
+  /** Var: listing text scan mode, "off" (default) | "flag" | "block". See lib/textscan. */
+  LISTING_TEXT_SCAN?: string;
 }
 
 /** Read bindings via OpenNext. Never `process.env` on Workers for bindings. */

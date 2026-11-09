@@ -40,6 +40,12 @@ export const listings = sqliteTable(
     logoUrl: text("logo_url"),
     websiteUrl: text("website_url"),
     xHandle: text("x_handle"),
+    /**
+     * Latest listing text scan (JSON TextScanResult from lib/textscan), over the
+     * listing's and its endpoints' seller-written text. Null when the scan is off
+     * or has not run. Internal review data: never shown to buyers as "safe".
+     */
+    textScan: text("text_scan"),
     createdAt: integer("created_at").notNull().$defaultFn(now),
     updatedAt: integer("updated_at").notNull().$defaultFn(now),
   },

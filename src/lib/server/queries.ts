@@ -4,7 +4,8 @@ import { listings, payments, services, type Listing, type Service } from "@/db/s
 import { db, envAsync } from "./env";
 
 export type PublicService = Omit<Service, "quotePath" | "createdAt" | "updatedAt">;
-export type PublicListing = Omit<Listing, "upstreamSecret" | "upstreamUrl"> & {
+// textScan is internal review data: never in a public listing.
+export type PublicListing = Omit<Listing, "upstreamSecret" | "upstreamUrl" | "textScan"> & {
   calls: number;
   services: PublicService[];
   /** Cheapest live paid price, or null when every live endpoint is free. */

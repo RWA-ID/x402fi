@@ -4,6 +4,8 @@ import { db, envAsync } from "@/lib/server/env";
 import { ownedListing, validateService, type ServiceInput } from "@/lib/server/services";
 import { nativeUrl, probeNative } from "@/lib/server/native";
 import { listings } from "@/db/schema";
+import { listingScanMode, rescanListing } from "@/lib/server/textscan";
+import { serviceBlockErrors } from "@/lib/textscan";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -28,13 +30,21 @@ export async function PATCH(req: Request, { params }: Ctx) {
   });
   if (clash) return Response.json({ errors: { path: `There is already a ${method} endpoint at ${path}.` } }, { status: 422 });
   const merged = { ...svc, ...v.value };
+  let nativeDescription: string | null = null;
   if (merged.pricing === "native" && merged.status === "live") {
     const l = await d.query.listings.findFirst({ where: eq(listings.id, svc.listingId), columns: { upstreamUrl: true } });
     const p = await probeNative(nativeUrl(l!.upstreamUrl, merged.path, merged.exampleRequest), merged.method, merged.method === "POST" ? merged.exampleBody ?? "{}" : null, { fresh: true });
     if (!p.ok) return Response.json({ errors: { path: `That endpoint's 402 could not be read: ${p.reason}` } }, { status: 422 });
     v.value.priceAtomic = p.quote.amount;
+    nativeDescription = p.quote.description;
+  }
+  if ((await listingScanMode()) === "block") {
+    // Only the text this edit sets: older flagged text must not block e.g. a pause.
+    const errors = serviceBlockErrors(v.value, nativeDescription);
+    if (errors) return Response.json({ errors }, { status: 422 });
   }
   await d.update(services).set({ ...v.value, updatedAt: Math.floor(Date.now() / 1000) }).where(eq(services.id, svc.id));
+  await rescanListing(svc.listingId);
   return Response.json({ ok: true });
 }
 
