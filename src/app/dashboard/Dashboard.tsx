@@ -50,7 +50,6 @@ function Inner({ seller }: { seller: string }) {
   if (err) return <p className="text-bad">{err}</p>;
   if (!data) return <p className="text-ink-3">Loading…</p>;
   const names = new Map(data.listings.map((l) => [l.id, l.name]));
-  const max = Math.max(1, ...data.daily.map((x) => Number(x.revenueAtomic)));
 
   return (
     <div>
@@ -74,19 +73,7 @@ function Inner({ seller }: { seller: string }) {
         <Stat label="Calls not charged" value={data.totals.failed.toLocaleString()} hint="Your API errored or settlement failed; buyers paid nothing." />
       </div>
 
-      <section className="card mt-3 p-5">
-        <div className="eyebrow">Last 30 days</div>
-        {data.daily.length ? (
-          <div className="mt-4 flex h-32 items-end gap-1" role="img" aria-label="Daily revenue, last 30 days">
-            {data.daily.map((x) => (
-              <div key={x.day} className="group relative flex-1">
-                <div className="rounded-t bg-ink/80" style={{ height: `${Math.max(3, (Number(x.revenueAtomic) / max) * 120)}px` }} />
-                <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-ink px-2 py-1 text-xs text-bg group-hover:block">{x.day}: {formatUsd(x.revenueAtomic)} · {x.calls} calls</div>
-              </div>
-            ))}
-          </div>
-        ) : <p className="mt-3 text-sm text-ink-3">No paid calls yet. Share your paid URL or try your own listing.</p>}
-      </section>
+      <DailyChart daily={data.daily} />
 
       <h2 className="display mt-12 text-3xl">Listings</h2>
       {data.listings.length === 0 ? (
@@ -207,5 +194,53 @@ function ListingRow({ l, patch, notify, reload }: { l: L; patch: (id: string, b:
       {secret && <p className="mt-3 break-all rounded-lg bg-card p-3 font-mono text-xs">X-X402Fi-Secret: {secret}</p>}
       <EndpointsEditor listingId={l.id} slug={l.slug} onChange={reload} />
     </div>
+  );
+}
+
+/**
+ * Daily revenue, last 30 days, one bar per UTC day.
+ *
+ * The API returns only days that had payments, so the days in between are filled in
+ * here. Without that, a seller with one paid day got one bar stretched across the
+ * whole card: a solid block that read as anything but a chart.
+ */
+function DailyChart({ daily }: { daily: Data["daily"] }) {
+  const byDay = new Map(daily.map((d) => [d.day, d]));
+  const today = new Date();
+  const days = Array.from({ length: 30 }, (_, i) => {
+    const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - 29 + i));
+    const day = d.toISOString().slice(0, 10);
+    return byDay.get(day) ?? { day, revenueAtomic: "0", calls: 0 };
+  });
+  const max = Math.max(1, ...days.map((d) => Number(d.revenueAtomic)));
+  const total = days.reduce((a, d) => a + BigInt(d.revenueAtomic), 0n);
+  const label = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+  return (
+    <section className="card mt-3 p-5">
+      <div className="flex items-baseline justify-between gap-4">
+        <div className="eyebrow">Last 30 days</div>
+        <div className="text-sm text-ink-2">{formatUsd(total.toString())}</div>
+      </div>
+      {daily.length ? (
+        <>
+          <div className="mt-4 flex h-32 items-end gap-[3px] border-b border-line" role="img" aria-label={`Daily revenue, last 30 days: ${formatUsd(total.toString())} total`}>
+            {days.map((x) => {
+              const v = Number(x.revenueAtomic);
+              return (
+                <div key={x.day} className="group relative flex h-full flex-1 items-end">
+                  <div className={`w-full rounded-t-sm ${v ? "bg-ink/80 group-hover:bg-ink" : "bg-line"}`} style={{ height: v ? `${Math.max(4, (v / max) * 100)}%` : "2px" }} />
+                  <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 hidden -translate-x-1/2 whitespace-nowrap rounded bg-ink px-2 py-1 text-xs text-bg group-hover:block">{label(x.day)}: {formatUsd(x.revenueAtomic)} · {x.calls} {x.calls === 1 ? "call" : "calls"}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-2 flex justify-between font-mono text-xs text-ink-3">
+            <span>{label(days[0].day)}</span>
+            <span>{label(days[29].day)}</span>
+          </div>
+        </>
+      ) : <p className="mt-3 text-sm text-ink-3">No paid calls yet. Share your paid URL or try your own listing.</p>}
+    </section>
   );
 }

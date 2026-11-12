@@ -23,10 +23,25 @@ export const robinhoodNetwork = defineChain({
 
 export const networks = [robinhoodNetwork, mainnet] as [typeof robinhoodNetwork, typeof mainnet];
 
+/**
+ * wagmi's stock cookieStorage writes a *session* cookie (no Max-Age), so closing the
+ * browser forgets the connection while AppKit, which keeps its own state in
+ * localStorage, still says "connected". The header then offered "Connect wallet" to
+ * someone whose wallet and sign-in were both still live. Same cookie, kept for a year.
+ */
+const persistentCookieStorage = {
+  ...cookieStorage,
+  setItem(key: string, value: string) {
+    if (typeof window === "undefined") return;
+    const secure = window.location.protocol === "https:" ? ";secure" : "";
+    document.cookie = `${key}=${value};path=/;max-age=31536000;samesite=Lax${secure}`;
+  },
+};
+
 export const wagmiAdapter = new WagmiAdapter({
   // ssr: true defers stored connection state to after mount (avoids React #418).
   ssr: true,
-  storage: createStorage({ storage: cookieStorage }),
+  storage: createStorage({ storage: persistentCookieStorage }),
   projectId,
   networks,
   transports: { [ROBINHOOD_CHAIN_ID]: http(robinhoodRpc), [mainnet.id]: http(mainnetRpc) },
