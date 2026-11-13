@@ -3,8 +3,9 @@ import { useState } from "react";
 import type { Connector } from "wagmi";
 import { useAccount, usePublicClient, useSwitchChain, useWriteContract } from "wagmi";
 import { mainnet } from "wagmi/chains";
-import { encodeFunctionData, namehash, type Hex } from "viem";
+import { encodeFunctionData, namehash, type Address, type Hex } from "viem";
 import {
+  buildSetAddressCalls,
   dnsEncode,
   ensVersion,
   getLowFees,
@@ -49,7 +50,12 @@ export function useWritePayee() {
   const [error, setError] = useState<string | null>(null);
   const [hash, setHash] = useState<`0x${string}` | null>(null);
 
-  const write = async (name: string, origin: string, payTo: string, profile: ProfileRecords = {}) => {
+  /**
+   * `linkAddress`: also point the name's Ethereum and Base address records at this wallet
+   * (a freshly minted x402 Identity name resolves to nothing until they are set). ENSv1
+   * resolvers only; skipped on an ENSv2 name.
+   */
+  const write = async (name: string, origin: string, payTo: string, profile: ProfileRecords = {}, linkAddress?: Address) => {
     if (!client) return false;
     setError(null);
     setHash(null);
@@ -72,7 +78,10 @@ export function useWritePayee() {
       if (chainId !== mainnet.id) await switchChainAsync({ chainId: mainnet.id });
       const [writes, fees] = await Promise.all([payeeWrites(c, [{ name, plan }]), getLowFees(c)]);
       // One name → one resolver → one multicall; the profile calls ride along in it.
-      if (writes.length === 1) writes[0].calls.push(...texts);
+      if (writes.length === 1) {
+        writes[0].calls.push(...texts);
+        if (linkAddress && version !== "v2") writes[0].calls.push(...buildSetAddressCalls(namehash(name), linkAddress));
+      }
       for (const w of writes) {
         setState("signing");
         const h = await writeContractAsync({ ...fees, chainId: writeChainId(connector), address: w.resolver, abi: publicResolverAbi, functionName: "multicall", args: [w.calls] });

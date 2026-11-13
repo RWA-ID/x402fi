@@ -17,11 +17,12 @@ type Line = { t: string; tone?: "ok" | "bad" | "dim" };
  */
 export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEntry, onPaid }: {
   slug: string; method: string; pathAndQuery: string; pricing: "free" | "fixed" | "quote" | "contract"; priceLabel: string;
-  nameEntry?: { suffix?: string };
+  /** `initial` pre-fills the name; `locked` hides the input (the caller already chose it). */
+  nameEntry?: { suffix?: string; initial?: string; locked?: boolean; cta?: string };
   /** Called with the parsed JSON response after a successful paid call (e.g. a registered name). */
   onPaid?: (body: unknown) => void;
 }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(nameEntry?.initial ?? "");
   const { address, chainId, isConnected } = useAccount();
   const { open } = useAppKit();
   const { switchChainAsync } = useSwitchChain();
@@ -97,14 +98,14 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
 
   return (
     <div className="mt-6">
-      {nameEntry && (
+      {nameEntry && !nameEntry.locked && (
         <div className="mb-3 flex items-center gap-2">
           <input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="yourname" spellCheck={false} autoCapitalize="none" aria-label="Name to register" />
           {nameEntry.suffix && <span className="shrink-0 font-mono text-sm text-ink-3">{nameEntry.suffix}</span>}
         </div>
       )}
       <button onClick={run} disabled={busy} className={`btn w-full ${pricing === "free" ? "btn-ghost" : "btn-primary"}`}>
-        {busy ? "Working…" : pricing === "free" ? "Try it · free" : !isConnected ? "Connect a wallet to try it" : nameEntry ? "Check price, then register" : `Try it · ${pricing === "quote" ? "see price, then pay" : `pay ${priceLabel}`}`}
+        {busy ? "Working…" : pricing === "free" ? "Try it · free" : !isConnected ? (nameEntry?.cta ? "Connect wallet to register" : "Connect a wallet to try it") : nameEntry ? nameEntry.cta ?? "Check price, then register" : `Try it · ${pricing === "quote" ? "see price, then pay" : `pay ${priceLabel}`}`}
       </button>
       {pricing !== "free" && <p className="mt-2 text-center text-xs text-ink-3">Needs USDG on Robinhood Chain. No gas: x402Fi pays it.</p>}
       {log.length > 0 && (

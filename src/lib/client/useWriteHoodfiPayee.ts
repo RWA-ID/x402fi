@@ -6,12 +6,8 @@ import { buildPayeeCalls, planPayeeRecords, textResolverAbi } from "@x402identit
 import { NETWORK, ROBINHOOD_CHAIN_ID } from "@/lib/chains";
 import type { ProfileRecords, WritePayeeState } from "./useWritePayee";
 
-/**
- * HoodFi's L2Registry on Robinhood Chain. It is also the resolver for every *.hoodfi.eth
- * name: it inherits ENS's TextResolver, AddrResolver and Multicallable, and HoodFi's CCIP
- * gateway serves any record from it on Ethereum. Node = standard namehash.
- */
-export const HOODFI_REGISTRY = "0xf2bABA012244bdD7445129597350054E1B3aEe5C" as const;
+import { HOODFI_REGISTRY } from "@/lib/names";
+export { HOODFI_REGISTRY };
 
 const registryAbi = parseAbi([
   "function ownerOf(uint256 tokenId) view returns (address)",

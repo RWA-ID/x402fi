@@ -66,7 +66,7 @@ x402Fi packages that into a product businesses and institutions can use without 
 | **Native x402 listings** | Sellers whose endpoint already charges with x402 list it as is: x402Fi reads the price, `payTo` and payee name from their 402 and buyers pay the seller **directly**. x402Fi never proxies, settles or takes a fee on these. |
 | **Priors credit records** | Listings show the payout wallet's [Priors](https://priors.trade) record (ERC-8004 agent credit on Robinhood Chain): score, loans repaid, defaults. |
 | **HoodFi payee names** | A `*.hoodfi.eth` name, native to Robinhood Chain, can be the payee name: its records are written in one Robinhood Chain transaction, and sellers can register one in the wizard over x402. |
-| **Listing wizard** | Five steps: service → price and payout → identity (optional) → connection test → publish. Proxied or native endpoint; ENS or HoodFi payee name, with optional logo, website and X records written in the same transaction. |
+| **Listing wizard** | Five steps: service → endpoints (as many as you sell, each with its own path and price) → name → connection test → publish. Proxied or native. The name step suggests payee names from the service name, checked live on HoodFi Names (Robinhood Chain, USDG) and x402 Identity (Ethereum), registers them in place, and reads an existing name's records first so a name already set up needs no signature. |
 | **Dashboard** | Revenue, a 30-day chart, ledger, CSV export, pause, payout rotation, upstream secret rotation, profile and endpoint editing. |
 | **Wallet sign-in** | Sign-In with Ethereum (EIP-4361). Works with injected, WalletConnect, email and social wallets (Reown AppKit). |
 | **Light and dark themes** | Cream-and-forest design system, phone-first layout. |
@@ -278,7 +278,7 @@ src/
     page.tsx                     landing page
     learn/ institutions/ developers/ discovery/ terms/ privacy/ disclaimer/
     market/                      marketplace + listing pages (TryIt)
-    sell/new/                    5-step listing wizard (proxied or native; ENS or HoodFi payee name)
+    sell/new/                    5-step listing wizard (multi-endpoint; HoodFi / x402 Identity name suggestions)
     dashboard/                   seller dashboard + endpoint editor
     receipt/[id]/                public receipts
     g/[slug]/[[...path]]/        x402 gateway route

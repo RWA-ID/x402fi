@@ -74,9 +74,7 @@ export function validateListing(i: ListingInput): { ok: true; value: Omit<Listin
   };
 }
 
-export function slugify(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "service";
-}
+export { slugify } from "@/lib/names";
 
 export function randomToken(bytes = 24) {
   const b = crypto.getRandomValues(new Uint8Array(bytes));
