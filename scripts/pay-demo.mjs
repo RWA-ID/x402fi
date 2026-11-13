@@ -8,7 +8,8 @@ import { homedir } from "node:os";
 import { createPublicClient, http, getAddress, toHex, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
-const MAX_ATOMIC = 10_000n; // $0.01
+// Test cap: $0.01 by default; raise per run with MAX_USDG=0.05 (6-dp USDG).
+const MAX_ATOMIC = BigInt(Math.round(Number(process.env.MAX_USDG ?? "0.01") * 1e6));
 const url = process.argv[2] ?? "https://x402fi.dev/g/demo-quote?symbol=USDG";
 const envFile = process.argv[3] ?? `${homedir()}/hoodfi-eth/contracts/.env`;
 const envVar = process.argv[4] ?? "PRIVATE_KEY";
@@ -28,7 +29,7 @@ const first = await fetch(url);
 if (first.status !== 402) { console.error(`expected 402, got ${first.status}: ${await first.text()}`); process.exit(1); }
 const pr = await first.json();
 const req = pr.accepts[0];
-if (BigInt(req.amount) > MAX_ATOMIC) { console.error(`refusing: price ${Number(req.amount) / 1e6} USDG is above the $0.01 test cap`); process.exit(1); }
+if (BigInt(req.amount) > MAX_ATOMIC) { console.error(`refusing: price ${Number(req.amount) / 1e6} USDG is above the ${Number(MAX_ATOMIC) / 1e6} USDG test cap (set MAX_USDG to raise it)`); process.exit(1); }
 console.log(`quote        ${Number(req.amount) / 1e6} USDG → ${req.payTo} on ${req.network}`);
 
 const message = {
