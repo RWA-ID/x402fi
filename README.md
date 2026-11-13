@@ -48,7 +48,7 @@ x402Fi packages that into a product businesses and institutions can use without 
 
 - **For businesses:** paste the URL of an API you already run, set a price, and x402Fi puts the paywall in front of it.
 - **For institutions:** every payment is non-custodial, settles on a public chain, comes with a receipt and a transaction hash, and lands in an exportable ledger. Payees can be bound to a signed on-chain name.
-- **For developers:** a public x402 facilitator for Robinhood Chain, a Bazaar-style discovery feed, and open protocol details.
+- **For developers:** a public x402 facilitator for Robinhood Chain, a Bazaar-style discovery feed, an MCP server for agents, and open protocol details.
 
 ## Features
 
@@ -62,7 +62,8 @@ x402Fi packages that into a product businesses and institutions can use without 
 | **On-chain products** | A `contract` pricing mode settles by calling a seller contract (e.g. register a name and deliver it) in **one atomic transaction**. |
 | **Ledger and receipts** | Every paid attempt is recorded (settled, not charged, or API error). Each payment has a public receipt page with its transaction hash, and sellers can export a CSV. |
 | **Public facilitator** | `/api/facilitator/verify`, `/settle`, `/supported` for anyone building x402 on Robinhood Chain. |
-| **Discovery feed** | Bazaar-style JSON of every paid endpoint for agents and indexers (`/api/discovery/resources`), with a readable view at [`/discovery`](https://x402fi.dev/discovery). |
+| **Discovery feed** | Bazaar-style JSON of every paid endpoint for agents and indexers (`/api/discovery/resources`), with a readable view at [`/discovery`](https://x402fi.dev/discovery). Items carry the `bazaar` extension (how to call each endpoint); filters and pagination follow the Bazaar spec, and the SDK path `/api/facilitator/discovery/resources` works too. |
+| **MCP server** | `https://x402fi.dev/mcp` (Streamable HTTP, no auth): `search_services`, `get_listing`, `get_payment_requirements`. Search and describe only; it never pays, signs or calls a paid endpoint. |
 | **Native x402 listings** | Sellers whose endpoint already charges with x402 list it as is: x402Fi reads the price, `payTo` and payee name from their 402 and buyers pay the seller **directly**. x402Fi never proxies, settles or takes a fee on these. |
 | **Priors credit records** | Listings show the payout wallet's [Priors](https://priors.trade) record (ERC-8004 agent credit on Robinhood Chain): score, loans repaid, defaults. |
 | **HoodFi payee names** | A `*.hoodfi.eth` name, native to Robinhood Chain, can be the payee name: its records are written in one Robinhood Chain transaction, and sellers can register one in the wizard over x402. |

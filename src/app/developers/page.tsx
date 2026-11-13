@@ -151,7 +151,13 @@ export default function Developers() {
       </Section>
 
       <Section id="discovery" title="Discovery">
-        <p>Every paid endpoint is published in a Bazaar-style feed that agents and indexers can crawl: <a className="font-mono underline" href="/api/discovery/resources">/api/discovery/resources</a> (JSON), with a readable view at <a className="underline" href="/discovery">/discovery</a>.</p>
+        <p>Every paid endpoint is published in a Bazaar-style feed that agents and indexers can crawl: <a className="font-mono underline" href="/api/discovery/resources">/api/discovery/resources</a> (JSON), with a readable view at <a className="underline" href="/discovery">/discovery</a>. Each item carries the <code className="font-mono">bazaar</code> extension (method, parameters, body, example output) and the feed takes <code className="font-mono">type</code>, <code className="font-mono">payTo</code>, <code className="font-mono">network</code>, <code className="font-mono">limit</code> and <code className="font-mono">offset</code>. Official x402 SDKs pointed at the facilitator find it at <span className="font-mono">/api/facilitator/discovery/resources</span>.</p>
+      </Section>
+
+      <Section id="mcp" title="MCP server">
+        <p>Claude, Cursor and other MCP clients can search x402Fi directly. Add this URL as a remote MCP server (Streamable HTTP, no sign-in):</p>
+        <Code>{"https://x402fi.dev/mcp"}</Code>
+        <p className="mt-3">Tools: <code className="font-mono">search_services</code>, <code className="font-mono">get_listing</code> (how to call each endpoint) and <code className="font-mono">get_payment_requirements</code> (the exact 402 for a request). It only finds and describes: it never pays, signs or calls a paid endpoint. Your agent pays with its own x402 wallet, so the checks in <a className="underline" href="#paying-safely">paying safely</a> still apply.</p>
       </Section>
 
       <Section id="payee" title="Verified payee">
