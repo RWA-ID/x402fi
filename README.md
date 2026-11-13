@@ -69,8 +69,9 @@ x402Fi packages that into a product businesses and institutions can use without 
 | **Priors credit records** | Listings show the payout wallet's [Priors](https://priors.trade) record (ERC-8004 agent credit on Robinhood Chain): score, loans repaid, defaults. |
 | **HoodFi payee names** | A `*.hoodfi.eth` name, native to Robinhood Chain, can be the payee name: its records are written in one Robinhood Chain transaction, and sellers can register one in the wizard over x402. |
 | **Listing wizard** | Five steps: service → endpoints (as many as you sell, each with its own path and price, or free) → name → connection test → publish. Proxied or native. The name step suggests payee names from the service name, checked live on HoodFi Names (Robinhood Chain, USDG) and x402 Identity (Ethereum), registers them in place, and reads an existing name's records first so a name already set up needs no signature. |
-| **Dashboard** | Revenue, a 30-day chart, ledger, CSV export, pause, payout rotation, upstream secret rotation, profile and endpoint editing. |
-| **Wallet sign-in** | Sign-In with Ethereum (EIP-4361). Works with injected, WalletConnect, email and social wallets (Reown AppKit). |
+| **Dashboard** | Revenue, a 30-day chart, ledger, CSV export, pause, payout rotation, upstream secret rotation, profile and endpoint editing (price, free, example request/body/response). A notice names any live paid endpoint without an example response, since that is what agents read before paying. |
+| **Example responses** | Each endpoint can show what a successful call returns: on the listing page, and as the `bazaar` output example in the feed and MCP. Text that looks like JSON must parse. |
+| **Wallet sign-in** | Sign-In with Ethereum (EIP-4361). Works with injected, WalletConnect, email and social wallets (Reown AppKit). Disconnecting the wallet also ends the dashboard session, and Sign out also disconnects the wallet: one action either way. |
 | **Light and dark themes** | Cream-and-forest design system, phone-first layout. |
 
 Listing is **free** and x402Fi takes **0%**. The only optional paid step in the flow is registering an x402 Identity name (a third-party ENS registrar, paid on Ethereum).
@@ -271,6 +272,10 @@ curl -X POST "https://x402fi.dev/g/ipfs-pinning/pin?name=hello.json" -H "content
 
 `GET /api/discovery/resources` (also at `/api/facilitator/discovery/resources`, the path the official x402 SDKs query) returns one item per paid live endpoint in the Bazaar format: `resource`, `accepts`, `extensions.bazaar` (how to call it: method, query/path params, body, example output; a contract endpoint adds a `routeTemplate`), `description`, `serviceName`, `tags`, `iconUrl`, and `metadata` (`name`, `description`, `category`, `method`, `pricing`, `priceIsCeiling`, `payeeName`, `listing`; contract endpoints add `settlement: "contract"`, `contract`, `pathTemplate`; native endpoints add `settlement: "direct"`, with `resource` being the seller's own URL and `accepts` read from its live 402). Filters: `type`, `payTo`, `scheme`, `network`, `extensions`; pagination: `limit` (default 100, max 500) and `offset`. CORS-open. Readable view: `/discovery`.
 
+### llms.txt
+
+`GET /llms.txt` ([llmstxt.org](https://llmstxt.org) Markdown): what x402Fi is, how an agent pays, links to the MCP server, feed and docs, and the live service list built from the discovery feed.
+
 ### MCP server
 
 `https://x402fi.dev/mcp` (Streamable HTTP, stateless, no auth): `search_services`, `get_listing`, `get_payment_requirements`. Read-only: it never pays, signs or calls a paid endpoint, and labels seller-written text as untrusted.
@@ -300,17 +305,21 @@ src/
     page.tsx                     landing page
     learn/ institutions/ developers/ discovery/ terms/ privacy/ disclaimer/
     market/                      marketplace + listing pages (TryIt)
-    sell/new/                    5-step listing wizard (multi-endpoint; HoodFi / x402 Identity name suggestions)
+    sell/new/                    5-step listing wizard (multi-endpoint, free or paid, example responses; HoodFi / x402 Identity name suggestions)
     dashboard/                   seller dashboard + endpoint editor
     receipt/[id]/                public receipts
     g/[slug]/[[...path]]/        x402 gateway route
-    api/                         facilitator, discovery, auth, listings (+ probe-native), services, dashboard, payments CSV, logo, rpc
+    mcp/                         MCP server endpoint (Streamable HTTP, stateless)
+    llms.txt/                    /llms.txt, generated from the discovery feed
+    og/listing/[slug]/           1200x630 share cards
+    api/                         facilitator (+ discovery alias for the SDKs), discovery, auth, listings (+ probe-native), services, dashboard, payments CSV, logo, rpc
   components/                    header, footer, handshake explainer, cards, payee + Priors badges, wallet button, legal layout
   db/schema.ts                   Drizzle schema
   lib/
     chains.ts                    Robinhood Chain, USDG, coin type
-    x402/                        types, encoding, money, requirements, EIP-712, facilitator, contract settlement, native 402 parser
+    x402/                        types, encoding, money, requirements, EIP-712, facilitator, contract settlement, native 402 parser, bazaar extension
     gateway/                     handler + pure routing/quote helpers
+    mcp/                         MCP tools (search, listing, payment requirements) + pure search ranking
     server/                      env bindings, chain clients, session, queries, payee, profile, discovery, native probe, Priors, validation
     client/                      wagmi/AppKit config, SIWE session hook, payee-record writers (ENS on Ethereum, HoodFi on Robinhood Chain)
     ssrf.ts  profile.ts  priors.ts
@@ -398,6 +407,8 @@ End-to-end checks that need no money: send a payment signed by a throwaway walle
 | `createAppKit` behind `typeof window` | `useAppKit()` throws during prerender | Called at module scope (`src/components/Providers.tsx`) |
 | Optional wallet SDK imports | `@x402/*` and `mppx` deep imports break the webpack build | Aliased to `false` in `next.config.ts` |
 | next/font variables | Defined on `<body>`, `:root` tokens can't see them | Font variables on `<html>` |
+| Logo URLs ending in `.png` | A CDN that negotiates by `Accept` served AgentFuel's `icon-512.png` as WebP, which the share-card renderer drops: the card had no logo | Card logos are fetched without `image/webp` in `Accept` (`fetchListingLogo(l, { forCard: true })`); `CARD_DESIGN` bumps card URLs so X re-fetches |
+| Ajv in the MCP SDK on Workers | Ajv compiles validators with `new Function`, which Workers block | The server uses the SDK's `CfWorkerJsonSchemaValidator` |
 | Node on IPv6-broken networks | `fetch` hangs connecting over IPv6 | `node --dns-result-order=ipv4first` for scripts |
 
 ## Reference values
