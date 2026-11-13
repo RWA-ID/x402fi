@@ -9,10 +9,14 @@ import { createPublicClient, http, getAddress, toHex, parseAbi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 // Test cap: $0.01 by default; raise per run with MAX_USDG=0.05 (6-dp USDG).
+// POST endpoints: METHOD=POST BODY='{"hello":"world"}' (CONTENT_TYPE defaults to application/json).
 const MAX_ATOMIC = BigInt(Math.round(Number(process.env.MAX_USDG ?? "0.01") * 1e6));
 const url = process.argv[2] ?? "https://x402fi.dev/g/demo-quote?symbol=USDG";
 const envFile = process.argv[3] ?? `${homedir()}/hoodfi-eth/contracts/.env`;
 const envVar = process.argv[4] ?? "PRIVATE_KEY";
+const method = (process.env.METHOD ?? "GET").toUpperCase();
+const reqBody = method === "GET" || method === "HEAD" ? undefined : process.env.BODY ?? "{}";
+const baseHeaders = reqBody === undefined ? {} : { "content-type": process.env.CONTENT_TYPE ?? "application/json" };
 
 const m = readFileSync(envFile, "utf8").match(new RegExp(`^${envVar}=["']?(0x)?([0-9a-fA-F]{64})["']?\\s*$`, "m"));
 if (!m) { console.error(`No ${envVar} in ${envFile}`); process.exit(1); }
@@ -25,7 +29,7 @@ console.log(`payer        ${account.address}`);
 console.log(`USDG before  ${Number(bal) / 1e6}`);
 
 const b64 = (v) => Buffer.from(JSON.stringify(v)).toString("base64");
-const first = await fetch(url);
+const first = await fetch(url, { method, headers: baseHeaders, body: reqBody });
 if (first.status !== 402) { console.error(`expected 402, got ${first.status}: ${await first.text()}`); process.exit(1); }
 const pr = await first.json();
 const req = pr.accepts[0];
@@ -52,7 +56,7 @@ const payment = {
 };
 
 const t0 = Date.now();
-const paid = await fetch(url, { headers: { "PAYMENT-SIGNATURE": b64(payment) } });
+const paid = await fetch(url, { method, headers: { ...baseHeaders, "PAYMENT-SIGNATURE": b64(payment) }, body: reqBody });
 const body = await paid.text();
 console.log(`status       ${paid.status} in ${Date.now() - t0} ms`);
 const rcpt = paid.headers.get("payment-response");
