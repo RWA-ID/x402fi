@@ -1,12 +1,16 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { useAccount, useSignMessage } from "wagmi";
+import { useAccount, useDisconnect, useSignMessage } from "wagmi";
 import { createSiweMessage } from "viem/siwe";
+
+/** Fired after the session ends, so every useSession on the page drops its seller. */
+export const SIGNED_OUT_EVENT = "x402fi:signed-out";
 
 /** Wallet sign-in (SIWE). `seller` is the signed-in address according to the server. */
 export function useSession() {
   const { address, chainId } = useAccount();
   const { signMessageAsync } = useSignMessage();
+  const { disconnectAsync } = useDisconnect();
   const [seller, setSeller] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -16,6 +20,11 @@ export function useSession() {
     setSeller(r.address ?? null);
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    const off = () => setSeller(null);
+    window.addEventListener(SIGNED_OUT_EVENT, off);
+    return () => window.removeEventListener(SIGNED_OUT_EVENT, off);
+  }, []);
 
   const signIn = async () => {
     if (!address) return;
@@ -35,7 +44,13 @@ export function useSession() {
       setError((e as { shortMessage?: string; message: string }).shortMessage ?? (e as Error).message.split("\n")[0]);
     } finally { setBusy(false); }
   };
-  const signOut = async () => { await fetch("/api/auth/logout", { method: "POST" }); setSeller(null); };
+  // One sign-out: ends the session AND disconnects the wallet (which SessionSync would also catch).
+  const signOut = async () => {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    setSeller(null);
+    window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
+    await disconnectAsync().catch(() => {});
+  };
   const mismatch = !!seller && !!address && seller.toLowerCase() !== address.toLowerCase();
   return { seller, signIn, signOut, busy, error, mismatch };
 }

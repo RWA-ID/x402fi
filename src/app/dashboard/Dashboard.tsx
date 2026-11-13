@@ -7,7 +7,7 @@ import { txUrl } from "@/lib/chains";
 import { useSession } from "@/lib/client/useSession";
 import { EndpointsEditor } from "./EndpointsEditor";
 
-interface L { id: string; slug: string; name: string; status: "draft" | "live" | "paused"; priceAtomic: string; payTo: string; identityName: string | null; logoUrl: string | null; websiteUrl: string | null; xHandle: string | null; revenueAtomic: string; calls: number }
+interface L { id: string; slug: string; name: string; status: "draft" | "live" | "paused"; priceAtomic: string; payTo: string; identityName: string | null; logoUrl: string | null; websiteUrl: string | null; xHandle: string | null; revenueAtomic: string; calls: number; missingExamples?: string[] }
 interface P { id: string; listingId: string; serviceId: string | null; payer: string; amountAtomic: string; status: string; txHash: string | null; error: string | null; createdAt: number; requestPath: string }
 interface Data { listings: L[]; payments: P[]; serviceNames: Record<string, string>; daily: { day: string; revenueAtomic: string; calls: number }[]; totals: { revenueAtomic: string; calls: number; failed: number } }
 
@@ -192,6 +192,12 @@ function ListingRow({ l, patch, notify, reload }: { l: L; patch: (id: string, b:
       )}
       {editing === "payTo" && l.identityName && <p className="mt-2 text-xs text-warn">After changing the payout, update the Robinhood Chain address on {l.identityName} too, or the payee check will fail.</p>}
       {secret && <p className="mt-3 break-all rounded-lg bg-card p-3 font-mono text-xs">X-X402Fi-Secret: {secret}</p>}
+      {!!l.missingExamples?.length && (
+        <div className="mt-4 rounded-xl border border-warn/40 bg-card p-4 text-sm">
+          <p className="font-medium">Add an example response to {l.missingExamples.length === 1 ? "this endpoint" : `these ${l.missingExamples.length} endpoints`}: {l.missingExamples.join(", ")}</p>
+          <p className="mt-1 text-ink-2">AI agents read it in x402Fi&apos;s discovery feed and MCP server to decide whether a call is worth paying for, and buyers see it on your listing. Use <strong>Edit</strong> on the endpoint below and paste what a successful call returns.</p>
+        </div>
+      )}
       <EndpointsEditor listingId={l.id} slug={l.slug} onChange={reload} />
     </div>
   );

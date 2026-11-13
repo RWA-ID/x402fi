@@ -35,7 +35,8 @@ export function cardTagline(kind: ReturnType<typeof sharePrice>["kind"]): string
 }
 
 /** Bump when the card's design changes, so every cached card is fetched again. */
-export const CARD_DESIGN = 2;
+// 3: card logos fetched without WebP (2026-11-13), so cached cards with a missing logo refresh.
+export const CARD_DESIGN = 3;
 
 /**
  * A short version for a listing's card URL (?v=…): changes when anything the card draws

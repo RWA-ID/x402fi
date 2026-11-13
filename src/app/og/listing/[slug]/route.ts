@@ -11,7 +11,7 @@ export async function GET(req: Request, { params }: Ctx) {
   if (!l || l.status === "draft") return new Response("Not found", { status: 404 });
   const p = sharePrice(l.services);
   // The card renderer draws PNG, JPEG and GIF; a WebP logo is left out rather than breaking the card.
-  const logo = await fetchListingLogo(l);
+  const logo = await fetchListingLogo(l, { forCard: true });
   const logoUrl = logo && logo.type !== "image/webp" ? `data:${logo.type};base64,${Buffer.from(logo.bytes).toString("base64")}` : null;
   return listingCardImage(
     {

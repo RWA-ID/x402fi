@@ -39,10 +39,19 @@ export async function GET() {
       .groupBy(payments.listingId),
   ]);
   const per = new Map(perListing.map((p) => [p.id, p]));
-  const svc = await d.select({ id: services.id, name: services.name }).from(services).where(inArray(services.listingId, ids));
+  const svc = await d
+    .select({ id: services.id, name: services.name, listingId: services.listingId, pricing: services.pricing, status: services.status, exampleResponse: services.exampleResponse })
+    .from(services)
+    .where(inArray(services.listingId, ids));
+  // Live paid endpoints with no example response: agents (feed, MCP) cannot see what they would buy.
+  const missing = new Map<string, string[]>();
+  for (const s of svc) {
+    if (s.status !== "live" || s.pricing === "free" || s.pricing === "native" || s.exampleResponse) continue;
+    missing.set(s.listingId, [...(missing.get(s.listingId) ?? []), s.name]);
+  }
   return Response.json({
     serviceNames: Object.fromEntries(svc.map((s) => [s.id, s.name])),
-    listings: mine.map(({ upstreamSecret: _s, textScan: _t, ...l }) => ({ ...l, revenueAtomic: String(per.get(l.id)?.revenue ?? 0), calls: per.get(l.id)?.calls ?? 0 })),
+    listings: mine.map(({ upstreamSecret: _s, textScan: _t, ...l }) => ({ ...l, revenueAtomic: String(per.get(l.id)?.revenue ?? 0), calls: per.get(l.id)?.calls ?? 0, missingExamples: missing.get(l.id) ?? [] })),
     payments: recent.map(({ deliveryScan: _d, ...p }) => p),
     daily: daily.map((r) => ({ day: r.day, revenueAtomic: String(r.revenue ?? 0), calls: r.calls ?? 0 })),
     totals: { revenueAtomic: String(totals[0]?.revenue ?? 0), calls: totals[0]?.calls ?? 0, failed: totals[0]?.failed ?? 0 },
