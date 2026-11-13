@@ -17,9 +17,12 @@ export interface EndpointInput {
   summary?: string;
   method?: "GET" | "POST";
   path?: string;
-  price?: string;
+  price?: string | null;
+  /** Proxied listings: "free" forwards without payment. Omitted = fixed price. */
+  pricing?: "free" | "fixed";
   exampleRequest?: string | null;
   exampleBody?: string | null;
+  exampleResponse?: string | null;
 }
 
 export async function GET() {
@@ -40,11 +43,16 @@ export async function POST(req: Request) {
   if (Array.isArray(input.endpoints) && input.endpoints.length > MAX_ENDPOINTS) {
     return Response.json({ errors: { endpoints: `Up to ${MAX_ENDPOINTS} endpoints per listing.` } }, { status: 422 });
   }
+  const isFree = (ep: EndpointInput) => !input.native && ep.pricing === "free";
+  if (eps.length && !input.native && eps.every(isFree)) {
+    return Response.json({ errors: { endpoints: "At least one endpoint must be paid." } }, { status: 422 });
+  }
   if (eps.length) {
-    // The listing-level price/method/example mirror the first endpoint (shown on cards).
+    // The listing-level price/method/example mirror the first endpoint (shown on cards);
+    // the price comes from the first PAID one (it is replaced by the cheapest below).
     const first = eps[0]!;
     input.method = first.method ?? "GET";
-    input.price = input.native ? "0.01" : first.price ?? "";
+    input.price = input.native ? "0.01" : eps.find((e) => !isFree(e))?.price ?? "";
     input.exampleRequest = first.exampleRequest ?? "";
     input.exampleBody = first.exampleBody ?? null;
   }
@@ -81,10 +89,11 @@ export async function POST(req: Request) {
       summary: ep.summary ?? "",
       method: ep.method ?? "GET",
       path: ep.path || "/",
-      pricing: input.native ? "native" : "fixed",
-      price: input.native ? null : ep.price,
+      pricing: input.native ? "native" : isFree(ep) ? "free" : "fixed",
+      price: input.native || isFree(ep) ? null : ep.price,
       exampleRequest: ep.exampleRequest ?? null,
       exampleBody: ep.exampleBody ?? null,
+      exampleResponse: ep.exampleResponse ?? null,
     });
     if (!sv.ok) { for (const [k, m] of Object.entries(sv.errors)) endpointErrors[`endpoints.${i}.${k}`] = m; continue; }
     const key = `${sv.value.method} ${sv.value.path}`;
@@ -103,8 +112,8 @@ export async function POST(req: Request) {
   }
   if (Object.keys(endpointErrors).length) return Response.json({ errors: endpointErrors }, { status: 422 });
   if (rows.length && !input.native) {
-    // Cards show "from $x": the cheapest endpoint.
-    v.value.priceAtomic = rows.map((r) => BigInt(r.priceAtomic ?? "0")).reduce((a, b) => (b < a ? b : a)).toString();
+    // Cards show "from $x": the cheapest PAID endpoint (a free one has no price).
+    v.value.priceAtomic = rows.filter((r) => r.pricing === "fixed" && r.priceAtomic).map((r) => BigInt(r.priceAtomic!)).reduce((a, b) => (b < a ? b : a)).toString();
   }
   try {
     await assertSafeUrl(v.value.upstreamUrl);

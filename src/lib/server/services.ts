@@ -76,8 +76,18 @@ export function validateService(i: ServiceInput, current?: Patch): { ok: true; v
     if (qp && (!/^\/[A-Za-z0-9._~\-/]*$/.test(qp) || qp.length > 120)) e.quotePath = "Use a plain path like /quote/register.";
     out.quotePath = qp;
   }
-  if (i.exampleRequest !== undefined) out.exampleRequest = s(i.exampleRequest).slice(0, 300) || null;
-  if (i.exampleResponse !== undefined) out.exampleResponse = s(i.exampleResponse).slice(0, 4000) || null;
+  if (i.exampleRequest !== undefined) {
+    // A bare "token=0x…" is a query: store it as "?token=0x…" so every reader agrees.
+    const ex = s(i.exampleRequest).slice(0, 300);
+    out.exampleRequest = (ex && !ex.startsWith("?") && !ex.includes("/") && ex.includes("=") ? `?${ex}` : ex) || null;
+  }
+  if (i.exampleResponse !== undefined) {
+    const r = s(i.exampleResponse);
+    // Plain text is fine; text that looks like JSON must parse (agents read it as the output example).
+    if (r && /^[[{]/.test(r)) { try { JSON.parse(r); } catch { e.exampleResponse = "This looks like JSON but does not parse. Paste the response exactly as your API returns it."; } }
+    if (r.length > 4000) e.exampleResponse = "Keep the example under 4,000 characters.";
+    out.exampleResponse = r || null;
+  }
   if (i.exampleBody !== undefined) {
     const b = s(i.exampleBody);
     if (b) { try { JSON.parse(b); } catch { e.exampleBody = "Must be valid JSON."; } }

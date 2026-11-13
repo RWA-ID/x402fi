@@ -5,19 +5,20 @@ import { atomicToUsd, formatUsd } from "@/lib/x402/money";
 interface Svc {
   id: string; name: string; summary: string; method: string; path: string;
   pricing: "free" | "fixed" | "quote" | "contract" | "native"; priceAtomic: string | null; quotePath: string | null; maxPriceAtomic: string | null;
-  exampleRequest: string | null; exampleBody: string | null; status: "live" | "paused";
+  exampleRequest: string | null; exampleBody: string | null; exampleResponse: string | null; status: "live" | "paused";
 }
 interface Form {
   name: string; summary: string; method: "GET" | "POST"; path: string;
-  pricing: "free" | "fixed" | "quote" | "native"; price: string; quotePath: string; maxPrice: string; exampleRequest: string; exampleBody: string;
+  pricing: "free" | "fixed" | "quote" | "native"; price: string; quotePath: string; maxPrice: string; exampleRequest: string; exampleBody: string; exampleResponse: string;
 }
-const EMPTY: Form = { name: "", summary: "", method: "GET", path: "/", pricing: "fixed", price: "0.01", quotePath: "", maxPrice: "", exampleRequest: "", exampleBody: "" };
+const EMPTY: Form = { name: "", summary: "", method: "GET", path: "/", pricing: "fixed", price: "0.01", quotePath: "", maxPrice: "", exampleRequest: "", exampleBody: "", exampleResponse: "" };
 
 const toForm = (s: Svc): Form => ({
   name: s.name, summary: s.summary, method: s.method as Form["method"], path: s.path, pricing: s.pricing === "contract" ? "quote" : s.pricing,
   price: s.priceAtomic ? atomicToUsd(s.priceAtomic) : "", quotePath: s.quotePath ?? "", maxPrice: s.maxPriceAtomic ? atomicToUsd(s.maxPriceAtomic) : "",
   exampleRequest: s.exampleRequest ?? "",
   exampleBody: s.exampleBody ?? "",
+  exampleResponse: s.exampleResponse ?? "",
 });
 
 export function EndpointsEditor({ listingId, slug, onChange }: { listingId: string; slug: string; onChange: () => void }) {
@@ -124,8 +125,15 @@ export function EndpointsEditor({ listingId, slug, onChange }: { listingId: stri
             <p className="rounded-lg bg-bg p-3 text-xs text-ink-2">Your endpoint at this path already answers 402 in USDG on Robinhood Chain. x402Fi reads its price and payTo when you save, lists it, and buyers pay you directly.</p>
           )}
           <Input label="Example (optional)" value={form.exampleRequest} onChange={(v) => set("exampleRequest", v)} placeholder="/alice or ?q=1" />
-          {form.pricing === "native" && form.method === "POST" && (
+          {form.method === "POST" && (
             <Input label="Example JSON body" value={form.exampleBody} onChange={(v) => set("exampleBody", v)} error={errors.exampleBody} placeholder='{"minutes": 2, "task": "..."}' />
+          )}
+          {form.pricing !== "native" && (
+            <label className="block">
+              <span className="eyebrow">Example response (optional)</span>
+              <textarea className="field mt-1.5 min-h-24 font-mono text-sm" value={form.exampleResponse} onChange={(e) => set("exampleResponse", e.target.value)} placeholder='{"pair": "EURUSD", "rate": 1.0842}' spellCheck={false} />
+              {errors.exampleResponse ? <span className="mt-1 block text-xs text-bad">{errors.exampleResponse}</span> : <span className="mt-1 block text-xs text-ink-3">What a successful call returns. Shown on your listing; AI agents read it to know what they are paying for.</span>}
+            </label>
           )}
           <div className="flex gap-2">
             <button className="btn btn-primary" disabled={busy} onClick={save}>{busy ? "Saving…" : editing === "new" ? "Add endpoint" : "Save"}</button>

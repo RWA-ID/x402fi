@@ -21,10 +21,14 @@ export interface EndpointDraft {
   method: "GET" | "POST";
   path: string;
   price: string;
+  /** Proxied listings only: forwarded without payment (a status or lookup endpoint). */
+  free: boolean;
   /** ?query or /path/suffix used in examples, "Try it" and the connection test. */
   example: string;
   /** POST: the JSON body sent to read a native endpoint's 402, and shown as the example. */
   exampleBody: string;
+  /** What a successful call returns, shown to buyers and to agents (Bazaar output example). */
+  exampleResponse: string;
 }
 
 export interface Draft {
@@ -39,7 +43,7 @@ export interface Draft {
 }
 
 const newEndpoint = (over: Partial<EndpointDraft> = {}): EndpointDraft => ({
-  id: Math.random().toString(36).slice(2, 10), name: "", method: "GET", path: "/", price: "0.01", example: "", exampleBody: "", ...over,
+  id: Math.random().toString(36).slice(2, 10), name: "", method: "GET", path: "/", price: "0.01", free: false, example: "", exampleBody: "", exampleResponse: "", ...over,
 });
 const EMPTY: Draft = { name: "", summary: "", description: "", category: "", upstreamUrl: "", endpoints: [newEndpoint()], payTo: "", dailyCap: "", identityName: "", native: false };
 const KEY = "x402fi:draft:v2";
@@ -51,7 +55,7 @@ export function Wizard() {
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
 
   // Unsent draft survives a reload (per-browser convenience only).
-  useEffect(() => { try { const s = localStorage.getItem(KEY); if (s) { const j = JSON.parse(s); setD({ ...EMPTY, ...j, endpoints: Array.isArray(j.endpoints) && j.endpoints.length ? j.endpoints : EMPTY.endpoints }); } } catch {} }, []);
+  useEffect(() => { try { const s = localStorage.getItem(KEY); if (s) { const j = JSON.parse(s); setD({ ...EMPTY, ...j, endpoints: Array.isArray(j.endpoints) && j.endpoints.length ? j.endpoints.map((e: Partial<EndpointDraft>) => newEndpoint(e)) : EMPTY.endpoints }); } } catch {} }, []);
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch {} }, [d]);
 
   const validate = (s: number) => {
@@ -70,11 +74,15 @@ export function Wizard() {
         const k = `${ep.method} ${p}`;
         if (seen.has(k)) e[`ep.${i}.path`] = `${k} is listed twice.`;
         seen.add(k);
-        if (!d.native) {
+        if (!d.native && !ep.free) {
           try { const a = usdToAtomic(ep.price); if (a < MIN_PRICE_ATOMIC) e[`ep.${i}.price`] = `Minimum is ${MIN_PRICE_LABEL}.`; else if (a > 1_000_000_000n) e[`ep.${i}.price`] = "Maximum is $1,000."; } catch (err) { e[`ep.${i}.price`] = (err as Error).message; }
         }
         if (ep.method === "POST" && ep.exampleBody.trim()) { try { JSON.parse(ep.exampleBody); } catch { e[`ep.${i}.exampleBody`] = "Must be valid JSON."; } }
+        const resp = ep.exampleResponse.trim();
+        if (/^[[{]/.test(resp)) { try { JSON.parse(resp); } catch { e[`ep.${i}.exampleResponse`] = "This looks like JSON but does not parse."; } }
+        if (resp.length > 4000) e[`ep.${i}.exampleResponse`] = "Keep it under 4,000 characters.";
       });
+      if (!d.native && d.endpoints.every((ep) => ep.free)) e.endpoints = "At least one endpoint must be paid. Free endpoints sit next to the ones you charge for.";
       if (!isAddress(d.payTo.trim(), { strict: false })) e.payTo = d.native ? "Read your endpoints' 402s first: the payout wallet comes from them." : "Enter the wallet address that should receive USDG.";
       if (d.dailyCap.trim()) { try { usdToAtomic(d.dailyCap); } catch (err) { e.dailyCap = (err as Error).message; } }
     }
@@ -215,10 +223,10 @@ function StepEndpoints({ d, set, errors }: StepProps) {
   const remove = (i: number) => set("endpoints", d.endpoints.filter((_, j) => j !== i));
   const add = () => {
     const last = d.endpoints[d.endpoints.length - 1];
-    set("endpoints", [...d.endpoints, newEndpoint({ method: last?.method ?? "GET", price: last?.price ?? "0.01", path: "" })]);
+    set("endpoints", [...d.endpoints, newEndpoint({ method: last?.method ?? "GET", price: last && !last.free ? last.price : "0.01", path: "" })]);
   };
   const lowest = useMemo(() => {
-    try { return d.endpoints.map((e) => usdToAtomic(e.price)).reduce((a, b) => (b < a ? b : a)); } catch { return 0n; }
+    try { return d.endpoints.filter((e) => !e.free).map((e) => usdToAtomic(e.price)).reduce((a, b) => (b < a ? b : a)); } catch { return 0n; }
   }, [d.endpoints]);
 
   return (
@@ -248,10 +256,18 @@ function StepEndpoints({ d, set, errors }: StepProps) {
                 </Field>
                 {!d.native && (
                   <Field label="Price per call" error={errors[`ep.${i}.price`]}>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-ink-3">$</span>
-                      <input className="field" style={{ paddingLeft: "1.6rem" }} value={ep.price} onChange={(e) => update(i, { price: e.target.value })} inputMode="decimal" />
-                    </div>
+                    {ep.free ? (
+                      <div className="field flex items-center font-mono text-ink-2">Free</div>
+                    ) : (
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-mono text-ink-3">$</span>
+                        <input className="field" style={{ paddingLeft: "1.6rem" }} value={ep.price} onChange={(e) => update(i, { price: e.target.value })} inputMode="decimal" />
+                      </div>
+                    )}
+                    <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-xs text-ink-2">
+                      <input type="checkbox" checked={ep.free} onChange={(e) => update(i, { free: e.target.checked })} />
+                      Free, no payment
+                    </label>
                   </Field>
                 )}
               </div>
@@ -263,6 +279,13 @@ function StepEndpoints({ d, set, errors }: StepProps) {
                   <input className="field font-mono" value={ep.example} onChange={(e) => update(i, { example: e.target.value })} placeholder="?pair=EURUSD" spellCheck={false} autoCapitalize="none" />
                 </Field>
               </div>
+              {!d.native && (
+                <div className="mt-3">
+                  <Field label="Example response (optional)" error={errors[`ep.${i}.exampleResponse`]} hint="What a successful call returns. Buyers see it on your listing, and AI agents read it to know what they are paying for.">
+                    <textarea className="field min-h-20 font-mono text-sm" value={ep.exampleResponse} onChange={(e) => update(i, { exampleResponse: e.target.value })} placeholder='{"pair": "EURUSD", "rate": 1.0842}' spellCheck={false} />
+                  </Field>
+                </div>
+              )}
               {ep.method === "POST" && (
                 <div className="mt-3">
                   <Field label="Example JSON body (optional)" error={errors[`ep.${i}.exampleBody`]} hint={d.native ? "Sent once, unpaid, to read your 402." : "Shown to buyers as the example request."}>
@@ -392,7 +415,7 @@ function explain(r: TestResult, native: boolean): { tone: "good" | "warn" | "bad
 function StepTest({ d }: { d: Draft }) {
   const [res, setRes] = useState<Record<string, TestResult>>({});
   const [busy, setBusy] = useState(false);
-  const first = d.endpoints[0];
+  const first = d.endpoints.find((e) => d.native || !e.free) ?? d.endpoints[0];
   const preview = useMemo(() => {
     try {
       return JSON.stringify(buildPaymentRequired({
@@ -456,7 +479,7 @@ function StepLive({ d, onDone }: { d: Draft; onDone: () => void }) {
     const body = {
       name: d.name, summary: d.summary, description: d.description, category: d.category, upstreamUrl: d.upstreamUrl.trim(),
       payTo: d.payTo, dailyCap: d.dailyCap, identityName: d.identityName, native: d.native, publish: true,
-      endpoints: d.endpoints.map((e) => ({ name: e.name.trim() || undefined, method: e.method, path: normalizePath(e.path), price: e.price, exampleRequest: e.example.trim() || null, exampleBody: e.method === "POST" ? e.exampleBody.trim() || null : null })),
+      endpoints: d.endpoints.map((e) => ({ name: e.name.trim() || undefined, method: e.method, path: normalizePath(e.path), price: !d.native && e.free ? null : e.price, pricing: !d.native && e.free ? "free" : undefined, exampleRequest: e.example.trim() || null, exampleBody: e.method === "POST" ? e.exampleBody.trim() || null : null, exampleResponse: !d.native ? e.exampleResponse.trim() || null : null })),
     };
     const r = await fetch("/api/listings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const j = (await r.json().catch(() => ({}))) as { errors?: Record<string, string>; error?: string; slug: string; upstreamSecret: string };
@@ -476,7 +499,7 @@ function StepLive({ d, onDone }: { d: Draft; onDone: () => void }) {
         <div className="space-y-3">
           {d.endpoints.map((e) => {
             const path = normalizePath(e.path);
-            return <Copy key={e.id} label={`${e.method} ${path} · ${d.native ? "paid to you directly" : `$${e.price}`}`} value={d.native ? upstreamFor(d.upstreamUrl, path, "") : `${origin}/g/${out.slug}${path === "/" ? "" : path}`} />;
+            return <Copy key={e.id} label={`${e.method} ${path} · ${d.native ? "paid to you directly" : e.free ? "free" : `$${e.price}`}`} value={d.native ? upstreamFor(d.upstreamUrl, path, "") : `${origin}/g/${out.slug}${path === "/" ? "" : path}`} />;
           })}
         </div>
         {!d.native && (
@@ -514,7 +537,7 @@ function StepLive({ d, onDone }: { d: Draft; onDone: () => void }) {
               {d.endpoints.map((e) => (
                 <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
                   <span className="font-mono">{e.method} {normalizePath(e.path)}{e.name ? <span className="ml-2 font-sans text-ink-3">{e.name}</span> : null}</span>
-                  <span className="font-mono">{d.native ? `$${e.price} · from your 402` : `$${e.price}`}</span>
+                  <span className="font-mono">{d.native ? `$${e.price} · from your 402` : e.free ? "Free" : `$${e.price}`}</span>
                 </li>
               ))}
             </ul>

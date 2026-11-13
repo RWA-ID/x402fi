@@ -24,19 +24,20 @@ x402Fi lets any business sell an API, a data feed, an AI agent or an on-chain pr
 6. [Pricing modes](#pricing-modes)
 7. [Verified Payee (x402 Identity)](#verified-payee-x402-identity)
 8. [On-chain settlement: HoodFi name registration](#on-chain-settlement-hoodfi-name-registration)
-9. [Security model](#security-model)
-10. [Public APIs](#public-apis)
-11. [Data model](#data-model)
-12. [Project structure](#project-structure)
-13. [Local development](#local-development)
-14. [Configuration and secrets](#configuration-and-secrets)
-15. [Database migrations](#database-migrations)
-16. [Deploying](#deploying)
-17. [Testing](#testing)
-18. [Operations](#operations)
-19. [Known traps](#known-traps)
-20. [Reference values](#reference-values)
-21. [Legal](#legal)
+9. [Our services on x402Fi: IPFS Pinning](#our-services-on-x402fi-ipfs-pinning)
+10. [Security model](#security-model)
+11. [Public APIs](#public-apis)
+12. [Data model](#data-model)
+13. [Project structure](#project-structure)
+14. [Local development](#local-development)
+15. [Configuration and secrets](#configuration-and-secrets)
+16. [Database migrations](#database-migrations)
+17. [Deploying](#deploying)
+18. [Testing](#testing)
+19. [Operations](#operations)
+20. [Known traps](#known-traps)
+21. [Reference values](#reference-values)
+22. [Legal](#legal)
 
 ---
 
@@ -67,7 +68,7 @@ x402Fi packages that into a product businesses and institutions can use without 
 | **Native x402 listings** | Sellers whose endpoint already charges with x402 list it as is: x402Fi reads the price, `payTo` and payee name from their 402 and buyers pay the seller **directly**. x402Fi never proxies, settles or takes a fee on these. |
 | **Priors credit records** | Listings show the payout wallet's [Priors](https://priors.trade) record (ERC-8004 agent credit on Robinhood Chain): score, loans repaid, defaults. |
 | **HoodFi payee names** | A `*.hoodfi.eth` name, native to Robinhood Chain, can be the payee name: its records are written in one Robinhood Chain transaction, and sellers can register one in the wizard over x402. |
-| **Listing wizard** | Five steps: service → endpoints (as many as you sell, each with its own path and price) → name → connection test → publish. Proxied or native. The name step suggests payee names from the service name, checked live on HoodFi Names (Robinhood Chain, USDG) and x402 Identity (Ethereum), registers them in place, and reads an existing name's records first so a name already set up needs no signature. |
+| **Listing wizard** | Five steps: service → endpoints (as many as you sell, each with its own path and price, or free) → name → connection test → publish. Proxied or native. The name step suggests payee names from the service name, checked live on HoodFi Names (Robinhood Chain, USDG) and x402 Identity (Ethereum), registers them in place, and reads an existing name's records first so a name already set up needs no signature. |
 | **Dashboard** | Revenue, a 30-day chart, ledger, CSV export, pause, payout rotation, upstream secret rotation, profile and endpoint editing. |
 | **Wallet sign-in** | Sign-In with Ethereum (EIP-4361). Works with injected, WalletConnect, email and social wallets (Reown AppKit). |
 | **Light and dark themes** | Cream-and-forest design system, phone-first layout. |
@@ -221,6 +222,22 @@ An x402 buyer only signs, but HoodFi's registrar mints to whoever sends the tran
 
 Any failure reverts all four, so the buyer is never charged without the name. The name always goes to the address that signed. The contract keeps no margin and is never a registrar. Measured gas: about 350 to 400k (≈ $0.02 to $0.05). The first registration through x402 was `dominic.hoodfi.eth`.
 
+## Our services on x402Fi: IPFS Pinning
+
+x402Fi also lists services we run ourselves, on the same terms as any seller. **IPFS Pinning** ([`/market/ipfs-pinning`](https://x402fi.dev/market/ipfs-pinning), payee name `ipfs.hoodfi.eth`, site [ipfs.hoodfi.eth.link](https://ipfs.hoodfi.eth.link)) lets an agent pin a file to IPFS with one x402 payment: no account, no API key.
+
+| Endpoint | Price |
+|---|---|
+| `POST /g/ipfs-pinning/pin`: pins the request body (any content type, or multipart `file`), up to 1 MB; optional `?name=report.pdf`; returns the CID and gateway links | $0.01 |
+| `GET https://ipfs.x402fi.dev/status/<cid>`: whether a CID is pinned, and until when | free |
+
+Pins are kept for **2 years** (`pinned_until` is in every response), then a daily job unpins them. The upstream is its own Cloudflare Worker at `ipfs.x402fi.dev` (Worker + D1, storage on Pinata) that accepts only calls carrying the listing's `X-X402Fi-Secret`, and answers non-2xx on any failure so the buyer is not charged. Pinata dedupes identical files, so a file stays pinned while any buyer's pin of it is live. The first paid pin settled on 2026-11-13 ([tx](https://robinhoodchain.blockscout.com/tx/0x7777724a01bf37b6c143e401164e0d9cbedadc0c8c82cd0e5824b91dcbe38c7f)).
+
+```bash
+# Unpaid: returns the 402 (price, payTo, payee-name and bazaar extensions)
+curl -X POST "https://x402fi.dev/g/ipfs-pinning/pin?name=hello.json" -H "content-type: application/json" -d '{"hello":"world"}'
+```
+
 ## Security model
 
 - **Non-custodial.** Payments go buyer → seller (or buyer → seller contract) under the buyer's own signature. The settlement wallet only holds ETH for gas and never receives USDG.
@@ -252,7 +269,11 @@ Any failure reverts all four, so the buyer is never charged without the name. Th
 
 ### Discovery
 
-`GET /api/discovery/resources` returns one item per paid live endpoint: `resource`, `accepts`, `metadata` (`name`, `description`, `category`, `method`, `pricing`, `priceIsCeiling`, `payeeName`, `listing`; contract endpoints add `settlement: "contract"`, `contract`, `pathTemplate`; native endpoints add `settlement: "direct"`, with `resource` being the seller's own URL and `accepts` read from its live 402). Readable view: `/discovery`.
+`GET /api/discovery/resources` (also at `/api/facilitator/discovery/resources`, the path the official x402 SDKs query) returns one item per paid live endpoint in the Bazaar format: `resource`, `accepts`, `extensions.bazaar` (how to call it: method, query/path params, body, example output; a contract endpoint adds a `routeTemplate`), `description`, `serviceName`, `tags`, `iconUrl`, and `metadata` (`name`, `description`, `category`, `method`, `pricing`, `priceIsCeiling`, `payeeName`, `listing`; contract endpoints add `settlement: "contract"`, `contract`, `pathTemplate`; native endpoints add `settlement: "direct"`, with `resource` being the seller's own URL and `accepts` read from its live 402). Filters: `type`, `payTo`, `scheme`, `network`, `extensions`; pagination: `limit` (default 100, max 500) and `offset`. CORS-open. Readable view: `/discovery`.
+
+### MCP server
+
+`https://x402fi.dev/mcp` (Streamable HTTP, stateless, no auth): `search_services`, `get_listing`, `get_payment_requirements`. Read-only: it never pays, signs or calls a paid endpoint, and labels seller-written text as untrusted.
 
 ### Listing helpers (signed-in sellers)
 

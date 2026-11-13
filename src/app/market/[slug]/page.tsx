@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { parseExample } from "@/lib/x402/bazaar";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -38,15 +39,15 @@ export async function generateMetadata({ params }: P): Promise<Metadata> {
   };
 }
 
-/** Example URL for an endpoint: its path plus the example ("/0x…/names" or "?q=1"). */
+/**
+ * Example URL for an endpoint: its path plus the example ("/0x…/names" or "?q=1").
+ * Parsed like the Bazaar feed, so a bare "token=0x…" is a query, not a path segment.
+ */
 function examplePath(s: PublicService) {
   const base = s.path === "/" ? "" : s.path;
-  const ex = (s.exampleRequest ?? "").trim();
-  if (!ex) return base;
-  if (ex.startsWith("?")) return base + ex;
-  // An example that already starts with the endpoint's path is used as is.
-  if (base && (ex === base || ex.startsWith(base + "/") || ex.startsWith(base + "?"))) return ex;
-  return base + (ex.startsWith("/") ? ex : "/" + ex);
+  const { subPath, query } = parseExample(s.path, s.exampleRequest);
+  const q = new URLSearchParams(query).toString();
+  return base + subPath + (q ? `?${q}` : "");
 }
 
 export default async function ListingPage({ params }: P) {
