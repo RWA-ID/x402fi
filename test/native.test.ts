@@ -17,7 +17,7 @@ const v2 = {
 describe("parseNative402", () => {
   it("reads the USDG/Robinhood option from the v2 header, with the payee name", () => {
     const r = parseNative402(402, encodeHeader(v2), "");
-    expect(r).toEqual({ ok: true, quote: { x402Version: 2, amount: "200000", payTo: PAYTO, payeeName: "agent002.402bot.eth", description: "2 minutes of worker time", networks: ["eip155:8453", "eip155:4663"] } });
+    expect(r).toEqual({ ok: true, quote: { x402Version: 2, amount: "200000", payTo: PAYTO, payeeName: "agent002.402bot.eth", description: "2 minutes of worker time", networks: ["eip155:8453", "eip155:4663"], bazaar: null } });
   });
   it("falls back to the JSON body, and reads v1 (network robinhood, maxAmountRequired)", () => {
     const v1 = { x402Version: 1, accepts: [{ scheme: "exact", network: "robinhood", maxAmountRequired: "10000", asset: USDG, payTo: PAYTO, description: "stock price" }] };

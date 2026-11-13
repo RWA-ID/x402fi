@@ -3,6 +3,7 @@ import { and, asc, eq, gte, sql } from "drizzle-orm";
 import { getAddress } from "viem";
 import { listings, payments, services, type Listing, type Service } from "@/db/schema";
 import { buildPaymentRequired, buildRequirements } from "@/lib/x402/requirements";
+import { bazaarExtension } from "@/lib/x402/bazaar";
 import { verifyPayment, settlePayment } from "@/lib/x402/facilitator";
 import { decodeHeader, encodeHeader, HEADERS } from "@/lib/x402/encoding";
 import type { PaymentPayload, SettleResponse } from "@/lib/x402/types";
@@ -43,6 +44,7 @@ function challenge(listing: Listing, service: Service, amountAtomic: bigint, res
     amountAtomic,
     payTo: getAddress(payTo),
     identityName: listing.identityName,
+    bazaar: bazaarExtension(service, `/g/${listing.slug}${service.path === "/" ? "" : service.path}`),
     error,
   });
   return json(402, pr, { [HEADERS.required]: encodeHeader(pr) });

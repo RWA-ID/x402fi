@@ -1,6 +1,7 @@
 import { getAddress, type Address } from "viem";
 import { NETWORK, USDG } from "../chains";
 import type { PaymentRequired, PaymentRequirements } from "./types";
+import type { BazaarExtension } from "./bazaar";
 
 export interface ChallengeInput {
   url: string;
@@ -10,6 +11,8 @@ export interface ChallengeInput {
   payTo: Address;
   /** x402 Identity name (e.g. acme.402api.eth); adds the payee-name extension. */
   identityName?: string | null;
+  /** How to call the endpoint (x402 Bazaar discovery extension). */
+  bazaar?: BazaarExtension;
   error?: string;
 }
 
@@ -32,6 +35,9 @@ export function buildPaymentRequired(input: ChallengeInput): PaymentRequired {
     accepts: [buildRequirements(input)],
   };
   if (input.error) pr.error = input.error;
-  if (input.identityName) pr.extensions = { "payee-name": { info: { name: input.identityName } } };
+  const extensions: Record<string, unknown> = {};
+  if (input.identityName) extensions["payee-name"] = { info: { name: input.identityName } };
+  if (input.bazaar) extensions.bazaar = input.bazaar;
+  if (Object.keys(extensions).length) pr.extensions = extensions;
   return pr;
 }

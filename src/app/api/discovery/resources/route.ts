@@ -1,6 +1,14 @@
-import { discoveryFeed } from "@/lib/server/discovery";
+import { discoveryFeed, parseDiscoveryQuery } from "@/lib/server/discovery";
 
-/** Bazaar-style discovery feed (JSON). Human-readable view: /discovery */
+export const dynamic = "force-dynamic";
+
+/**
+ * Bazaar discovery feed (JSON). Human-readable view: /discovery
+ * Filters: type, payTo, scheme, network, extensions; pagination: limit, offset.
+ * Public data, so any origin may read it (browser-based agents included).
+ */
 export async function GET(req: Request) {
-  return Response.json(await discoveryFeed(new URL(req.url).origin));
+  const url = new URL(req.url);
+  const feed = await discoveryFeed(url.origin, parseDiscoveryQuery(url.searchParams));
+  return Response.json(feed, { headers: { "access-control-allow-origin": "*", "cache-control": "public, max-age=60" } });
 }

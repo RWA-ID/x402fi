@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
-import { discoveryFeed } from "@/lib/server/discovery";
+import { discoveryFeed, MAX_LIMIT } from "@/lib/server/discovery";
 import { formatUsd } from "@/lib/x402/money";
 import { Copy } from "@/components/Copy";
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 export default async function Discovery() {
   const h = await headers();
   const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
-  const feed = await discoveryFeed(origin);
+  const feed = await discoveryFeed(origin, { limit: MAX_LIMIT });
   const feedUrl = `${origin}/api/discovery/resources`;
 
   return (
@@ -28,7 +28,7 @@ export default async function Discovery() {
       </p>
 
       <div className="mt-8 max-w-3xl">
-        <Copy label="Feed URL (JSON, for agents and indexers)" value={feedUrl} hint="Each item carries the resource URL, the x402 payment requirements (price, USDG, payTo, network) and metadata such as the payee name." />
+        <Copy label="Feed URL (JSON, for agents and indexers)" value={feedUrl} hint="Each item carries the resource URL, the x402 payment requirements (price, USDG, payTo, network), how to call it (the bazaar extension: method, parameters, example output) and the payee name. Filter with type, payTo, network and extensions; page with limit and offset." />
         <a href="/api/discovery/resources" className="btn btn-ghost mt-3">View raw JSON</a>
       </div>
 

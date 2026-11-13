@@ -1,6 +1,7 @@
 import { getAddress, isAddress, isAddressEqual } from "viem";
 import { NETWORK, USDG } from "../chains";
 import { decodeHeader } from "./encoding";
+import { isBazaarExtension, type BazaarExtension } from "./bazaar";
 
 /**
  * What x402Fi needs from a seller's own 402 to list a "native" endpoint: the USDG on
@@ -15,6 +16,8 @@ export interface NativeQuote {
   description: string | null;
   /** Every network the seller offers, for display ("also accepts USDC on Base"). */
   networks: string[];
+  /** The seller's own Bazaar declaration (extensions.bazaar), when its 402 has a valid one. */
+  bazaar?: BazaarExtension | null;
 }
 
 export type NativeProbe = { ok: true; quote: NativeQuote } | { ok: false; reason: string };
@@ -50,5 +53,6 @@ export function parseNative402(status: number, paymentRequiredHeader: string | n
   const ext = pr.extensions?.["payee-name"] as { info?: { name?: unknown } } | undefined;
   const payeeName = typeof ext?.info?.name === "string" && /^[a-z0-9-]+(\.[a-z0-9-]+)*\.eth$/.test(ext.info.name) ? ext.info.name : null;
   const description = (usdg.description ?? pr.resource?.description ?? null)?.toString().slice(0, 300) ?? null;
-  return { ok: true, quote: { x402Version: version, amount, payTo: getAddress(usdg.payTo), payeeName, description, networks } };
+  const bazaar = isBazaarExtension(pr.extensions?.bazaar) ? pr.extensions.bazaar : null;
+  return { ok: true, quote: { x402Version: version, amount, payTo: getAddress(usdg.payTo), payeeName, description, networks, bazaar } };
 }
