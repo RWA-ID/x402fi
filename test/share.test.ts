@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { cardTagline, sharePrice, shareText, xIntentUrl, X_HANDLE } from "@/lib/share";
-import { OG_FONTS, OG_SIZE, renderListingCard, type CardFont } from "@/lib/ogcard";
+import { BRAND_FILES, OG_FONTS, OG_SIZE, renderListingCard, renderSiteCard, type CardBrand, type CardFont } from "@/lib/ogcard";
 
 const svc = (pricing: string, priceAtomic: string | null = null, status = "live") => ({ pricing, priceAtomic, status });
 /** X's count: every URL is 23 chars, plus the newline the intent puts before it. */
@@ -57,14 +57,20 @@ describe("OG card", () => {
     const b = readFileSync(`public/fonts/${f.file}`);
     return { name: f.name, data: b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer, weight: f.weight, style: f.style };
   });
+  const brand = Object.fromEntries(Object.entries(BRAND_FILES).map(([k, f]) => [k, `data:image/png;base64,${readFileSync(`public/${f}`).toString("base64")}`])) as unknown as CardBrand;
   const jpg = `data:image/jpeg;base64,${readFileSync("test/fixtures/logo.jpg").toString("base64")}`;
   const cards = {
     hoodfi: { name: "HoodFi Names", summary: "Look up and register hoodfi.eth names on Robinhood Chain.", category: "Developer tools", price: "Free", priceNote: "lookups · paid calls priced per request", payeeName: "hoodfi.402api.eth", tagline: cardTagline("free"), logo: jpg },
+    verified: { name: "StockFi Trade", summary: "Stock Token GO/CAUTION/STOP checks and Monday-gap loan stress. Data only.", category: "AI & agents", price: "$0.02", priceNote: "from, per call", payeeName: "stockfi.hoodfi.eth", payeeVerified: true, tagline: cardTagline("paid"), logo: null },
     long: { name: "AgentFuel Rug Check for Robinhood Chain Tokens and Pools", summary: "S".repeat(10) + " checks every new token for honeypots, mint authority, LP locks and owner privileges before your agent buys it, in one call.", category: "AI & agents", price: "$0.01", priceNote: "per call", payeeName: null, tagline: cardTagline("paid"), logo: jpg },
   };
-  for (const [k, card] of Object.entries(cards)) {
+  const renders: Record<string, () => Response> = {
+    ...Object.fromEntries(Object.entries(cards).map(([k, card]) => [k, () => renderListingCard(card, fonts, brand)])),
+    site: () => renderSiteCard(fonts, brand),
+  };
+  for (const [k, render] of Object.entries(renders)) {
     it(`renders a ${OG_SIZE.width}x${OG_SIZE.height} PNG (${k})`, async () => {
-      const png = new Uint8Array(await renderListingCard(card, fonts).arrayBuffer());
+      const png = new Uint8Array(await render().arrayBuffer());
       expect([...png.slice(1, 4)].map((c) => String.fromCharCode(c)).join("")).toBe("PNG");
       const view = new DataView(png.buffer);
       expect([view.getUint32(16), view.getUint32(20)]).toEqual([OG_SIZE.width, OG_SIZE.height]);

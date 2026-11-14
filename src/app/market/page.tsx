@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { liveListings } from "@/lib/server/queries";
+import { withPayeeBadges } from "@/lib/server/payeeBadges";
 import { MarketBrowser } from "./MarketBrowser";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Marketplace", description: "Paid APIs and agents that accept USDG per call on Robinhood Chain." };
 
 export default async function Market() {
-  const rows = await liveListings(200);
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+  const rows = await withPayeeBadges(await liveListings(200), origin);
   return (
     <div className="mx-auto max-w-6xl px-4 pt-14 sm:px-6">
       <p className="eyebrow">Marketplace</p>

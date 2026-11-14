@@ -11,7 +11,6 @@ const cols = [
 export function Footer() {
   return (
     <footer className="mt-24 px-2 pb-2 sm:px-3 sm:pb-3">
-      <div className="ticks mb-3" aria-hidden />
       <div className="relative overflow-hidden rounded-2xl bg-forest px-6 pb-6 pt-12 text-forest-ink sm:px-12">
         <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-[1.4fr_1fr_1fr_1fr_1fr]">
           <div className="max-w-md">
@@ -63,7 +62,13 @@ export function Footer() {
             </div>
           ))}
         </div>
-        <div className="mt-16 flex flex-col-reverse items-start justify-between gap-6 sm:flex-row sm:items-end">
+        <p className="mt-12 max-w-3xl text-xs leading-relaxed opacity-50">
+          USDG and the Global Dollar brandmark are trademarks of Paxos or its affiliates. Robinhood and Robinhood Chain are
+          trademarks of Robinhood Markets, Inc. or its affiliates. They are used only to identify the token and network
+          x402Fi works with; x402Fi is not affiliated with, endorsed by or sponsored by Paxos or Robinhood.{" "}
+          <Link href="/disclaimer" className="underline underline-offset-2 hover:opacity-100">Disclaimer</Link>
+        </p>
+        <div className="mt-10 flex flex-col-reverse items-start justify-between gap-6 sm:flex-row sm:items-end">
           <p className="text-sm opacity-60">© {new Date().getFullYear()} Only Buy Bitcoin LLC · x402Fi</p>
           <p className="display text-[clamp(3.5rem,11vw,8.5rem)] leading-[0.8] text-sand">
             Paid <span className="italic">per call.</span>

@@ -282,9 +282,12 @@ function OwnName({ d, origin, value, onChange, picked, onUse }: { d: Draft; orig
     if (!isAddress(d.payTo, { strict: false })) { setErr("Set your payout wallet on the Endpoints step first."); return; }
     setErr(""); setChecking(true);
     const qs = new URLSearchParams({ name: n, payTo: d.payTo, ...(d.native ? { upstream: d.upstreamUrl } : {}) });
-    const r = await fetch(`/api/names/check?${qs}`, { signal: AbortSignal.timeout(20_000) }).then((r) => r.json() as Promise<Check & { error?: string }>).catch(() => null);
+    const r = await fetch(`/api/names/check?${qs}`, { signal: AbortSignal.timeout(20_000) }).then((r) => r.json() as Promise<Check & { error?: string; holder?: { status: number; error: string } | null }>).catch(() => null);
     setChecking(false);
     if (!r || r.error) { setErr(r?.error ?? "Could not check right now."); return; }
+    // Publishing requires the signed-in wallet to hold the name. A failed read (503) is
+    // not a "no": let them continue, and publishing checks again.
+    if (r.holder && r.holder.status !== 503) { setErr(r.holder.error); onUse(null); setCheck(null); return; }
     setCheck(r);
     onUse(n);
   };
@@ -304,7 +307,7 @@ function OwnName({ d, origin, value, onChange, picked, onUse }: { d: Draft; orig
               placeholder="acme.hoodfi.eth or acme.402api.eth" spellCheck={false} autoCapitalize="none" aria-label="Your name" />
             <button className="btn btn-ghost shrink-0" onClick={() => run()} disabled={!valid || checking}>{checking ? "Checking…" : "Check"}</button>
           </div>
-          <p className="mt-1.5 text-sm text-ink-3">Any HoodFi name or ENS name you control. We read its records first: if it&apos;s already set up for this listing, there is nothing to sign.</p>
+          <p className="mt-1.5 text-sm text-ink-3">Any HoodFi name or ENS name held by the wallet you signed in with. We read its records first: if it&apos;s already set up for this listing, there is nothing to sign.</p>
         </div>
       )}
       {err && <p className="text-sm text-bad">{err}</p>}

@@ -4,6 +4,7 @@ import { listings } from "@/db/schema";
 import { db, envAsync } from "@/lib/server/env";
 import { currentSeller } from "@/lib/server/session";
 import { randomToken } from "@/lib/server/listings";
+import { sellerHoldsNameError } from "@/lib/server/nameHolder";
 import { parseLogo, parseWebsite, parseXHandle, ProfileInputError } from "@/lib/profile";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -29,6 +30,11 @@ export async function PATCH(req: Request, { params }: Ctx) {
   if (body.identityName !== undefined) {
     const n = body.identityName?.trim().toLowerCase() || null;
     if (n && !/^[a-z0-9-]+(\.[a-z0-9-]+)*\.eth$/.test(n)) return Response.json({ error: "Use a full name like acme.402api.eth." }, { status: 422 });
+    if (n) {
+      // Only a name the signed-in wallet holds (no borrowing coinbase.eth).
+      const held = await sellerHoldsNameError(await envAsync(), n, seller);
+      if (held) return Response.json({ error: held.error }, { status: held.status });
+    }
     patch.identityName = n;
   }
   try {

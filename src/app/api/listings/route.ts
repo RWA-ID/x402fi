@@ -7,6 +7,7 @@ import { validateListing, slugify, randomToken, type ListingInput } from "@/lib/
 import { assertSafeUrl, UnsafeUrlError } from "@/lib/ssrf";
 import { nativeUrl, probeNative } from "@/lib/server/native";
 import { validateService } from "@/lib/server/services";
+import { sellerHoldsNameError } from "@/lib/server/nameHolder";
 import { listingScanMode, listingTextFields, rescanListing } from "@/lib/server/textscan";
 import { blockErrors, scanFields, serviceBlockErrors } from "@/lib/textscan";
 
@@ -76,6 +77,11 @@ export async function POST(req: Request) {
   if (input.native && eps.length) input.payTo ||= "0x0000000000000000000000000000000000000001"; // replaced by the probed payTo below
   const v = validateListing(input);
   if (!v.ok) return Response.json({ errors: v.errors }, { status: 422 });
+  // A payee name must be held by the signed-in wallet (no borrowing coinbase.eth).
+  if (v.value.identityName) {
+    const held = await sellerHoldsNameError(await envAsync(), v.value.identityName, seller);
+    if (held) return Response.json({ errors: { identityName: held.error } }, { status: held.status });
+  }
   if (native) v.value.priceAtomic = native.amount;
 
   // Validate (and for native, probe) every endpoint before anything is written.

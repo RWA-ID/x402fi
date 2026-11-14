@@ -8,6 +8,7 @@ import { nativeUrl, probeNative } from "@/lib/server/native";
 import { priorsRecord } from "@/lib/server/priors";
 import { PriorsBadge } from "@/components/PriorsBadge";
 import { payeeStatus } from "@/lib/server/payee";
+import { listingPayeeVerified } from "@/lib/server/payeeBadges";
 import { formatUsd } from "@/lib/x402/money";
 import { priceLabel } from "@/lib/gateway/services";
 import { addressUrl } from "@/lib/chains";
@@ -28,7 +29,9 @@ export async function generateMetadata({ params }: P): Promise<Metadata> {
   // openGraph and twitter REPLACE the root layout's, they do not merge: restate everything.
   const path = `/market/${l.slug}`;
   // X caches a card by its URL for days: the URL changes whenever what the card shows does.
-  const image = { url: `/og/listing/${l.slug}?v=${cardVersion(l)}`, width: 1200, height: 630, alt: `${l.name} on x402Fi` };
+  const h = await headers();
+  const verified = await listingPayeeVerified(l, `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`);
+  const image = { url: `/og/listing/${l.slug}?v=${cardVersion(l, verified)}`, width: 1200, height: 630, alt: `${l.name} on x402Fi` };
   const title = `${l.name} · x402Fi`;
   return {
     title: l.name,

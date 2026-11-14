@@ -1,35 +1,54 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { Handshake } from "@/components/Handshake";
 import { ListingCard } from "@/components/ListingCard";
 import { liveListings } from "@/lib/server/queries";
+import { withPayeeBadges } from "@/lib/server/payeeBadges";
 
 export const dynamic = "force-dynamic";
 
 const USES = ["Market data", "FX rates", "KYB checks", "Research reports", "Model inference", "Credit signals", "Sanctions screening", "Weather", "Legal search", "Price feeds", "Document parsing", "Risk scores"];
 
 export default async function Home() {
-  const featured = (await liveListings(6)).slice(0, 6);
+  const h = await headers();
+  const origin = `${h.get("x-forwarded-proto") ?? "https"}://${h.get("host")}`;
+  const featured = await withPayeeBadges((await liveListings(6)).slice(0, 6), origin);
   return (
     <>
       {/* Hero */}
-      <section className="mx-auto max-w-6xl px-4 pb-16 pt-16 text-center sm:px-6 sm:pt-24">
-        <p className="eyebrow">x402 payments · USDG · Robinhood Chain</p>
-        <h1 className="display mt-6 text-[clamp(3rem,9vw,6.5rem)]">
-          Let AI agents <span className="chip-hl">pay you</span>
-          <br />
-          per request, <span className="italic">in dollars.</span>
-        </h1>
-        <p className="mx-auto mt-6 max-w-xl text-lg text-ink-2">
-          Put a price on any API in five minutes. Agents pay in USDG with every call, the money lands in your wallet, and
-          every payment comes with a receipt your finance team can use.
-        </p>
-        <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <Link href="/sell/new" className="btn btn-primary px-6 py-3 text-base">List your API, free</Link>
-          <Link href="/learn" className="btn btn-ghost px-6 py-3 text-base">See how x402 works</Link>
+      <section className="relative mb-[72px] overflow-hidden border-b border-line">
+        <div aria-hidden className="hero-dots absolute inset-0" />
+        <div className="relative mx-auto flex min-h-[min(88vh,900px)] max-w-[1360px] flex-col items-center justify-center px-6 pb-[clamp(88px,10vw,128px)] pt-[clamp(96px,12vw,160px)] text-center">
+          <div className="flex flex-wrap items-center justify-center gap-3.5">
+            <span className="font-mono text-xs uppercase tracking-[.18em] text-ink-3">x402 payments on</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/robinhood-chain.png" alt="Robinhood Chain" width={1400} height={184} className="block h-[22px] w-auto" />
+          </div>
+          <h1 className="mt-7 font-serif text-[clamp(3.25rem,10vw,8.5rem)] font-normal leading-[1.06] tracking-[-0.03em] [text-wrap:balance]">
+            Let AI agents{" "}
+            <span className="mb-[.1em] inline-block rounded-[.12em] bg-chip px-[.12em] pb-[.08em] pt-[.04em] leading-[.86] text-chip-ink">pay you</span>
+            <br />
+            per request, <em>in</em>{" "}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/usdg-brandmark.png" alt="Global Dollar USDG" width={2000} height={660} className="ml-[.06em] inline h-[.92em] w-auto align-[-0.16em]" />
+          </h1>
+          <p className="mx-auto mt-8 max-w-[600px] text-[19px] leading-[1.6] text-ink-2 [text-wrap:pretty]">
+            Put a price on any API in five minutes. Agents pay in USDG with every call, the money lands in your wallet, and
+            every payment comes with a receipt your finance team can use.
+          </p>
+          <div className="mt-10 flex flex-wrap justify-center gap-3">
+            <Link href="/sell/new" className="btn rounded-[10px] bg-chip px-[26px] py-[15px] text-base text-chip-ink hover:opacity-[.92]">List your API, free</Link>
+            <Link href="/learn" className="btn rounded-[10px] border border-line bg-card px-[26px] py-[15px] text-base hover:bg-line">See how x402 works</Link>
+          </div>
+          <div className="mt-14 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-[13.5px] text-ink-3">
+            <span className="inline-flex items-center gap-3 rounded-full border border-line bg-[#f6f4ef] py-2 pl-3.5 pr-4">
+              <span className="font-mono text-[11px] uppercase tracking-[.14em] text-[#6f756c]">Settles in</span>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/usdg-brandmark.png" alt="Global Dollar USDG" width={2000} height={660} className="block h-6 w-auto" />
+            </span>
+            <span>No code</span><span aria-hidden>·</span><span>Free to list</span><span aria-hidden>·</span><span>0% taken from payments</span>
+          </div>
         </div>
-        <p className="mt-10 text-sm text-ink-3">
-          No code · No fee to list · 0% taken from payments · The only paid step is an optional x402 Identity name
-        </p>
       </section>
 
       {/* Handshake */}
@@ -49,7 +68,7 @@ export default async function Home() {
           ["Audit-ready", "A ledger, a receipt for each payment and a CSV export with transaction hashes."],
           ["Self-custodial", "USDG goes from the buyer's wallet to yours. x402Fi never holds funds."],
         ].map(([t, d]) => (
-          <div key={t} className="card bg-card p-6">
+          <div key={t} className="spot spot-feature rounded-2xl border border-line p-6">
             <h3 className="display text-2xl">{t}</h3>
             <p className="mt-2 text-sm text-ink-2">{d}</p>
           </div>
@@ -92,10 +111,10 @@ export default async function Home() {
       </section>
 
       {/* Marquee of uses */}
-      <section className="overflow-hidden py-14" aria-label="Examples of paid services">
+      <section className="marquee-fade overflow-hidden py-14" aria-label="Examples of paid services">
         <div className="marquee flex w-max gap-3">
           {[...USES, ...USES].map((u, i) => (
-            <span key={i} className="rounded-full border border-line px-5 py-2 text-ink-2">{u}</span>
+            <span key={i} className="whitespace-nowrap rounded-full border border-accent px-5 py-[9px] text-ink-2">{u}</span>
           ))}
         </div>
       </section>
@@ -107,11 +126,11 @@ export default async function Home() {
           ["Institutions", "Understand x402 with a live, plain-English walkthrough, then pilot it with receipts and controls.", "/institutions", "Read the brief"],
           ["Developers", "Use the public facilitator for Robinhood Chain, or add middleware to your own server.", "/developers", "Read the docs"],
         ].map(([t, d, h, c]) => (
-          <div key={t} className="card flex flex-col p-6">
+          <div key={t} className="spot spot-audience flex flex-col rounded-2xl border border-line p-7">
             <p className="eyebrow">For</p>
             <h3 className="display mt-1 text-4xl">{t}</h3>
-            <p className="mt-3 text-ink-2">{d}</p>
-            <Link href={h} className="btn btn-ghost mt-6 self-start">{c} →</Link>
+            <p className="mb-7 mt-3 text-ink-2">{d}</p>
+            <Link href={h} className="btn btn-ghost mt-auto self-start">{c} →</Link>
           </div>
         ))}
       </section>
@@ -148,9 +167,14 @@ function ReceiptMock() {
     <div className="self-center rounded-2xl bg-bg p-6 text-ink shadow-2xl sm:p-8">
       <div className="flex items-center justify-between">
         <span className="eyebrow">Payment receipt</span>
-        <span className="rounded-full bg-card px-2.5 py-1 text-xs text-good">Settled</span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-xs text-good"><span className="h-1.5 w-1.5 rounded-full bg-good" />Settled</span>
       </div>
-      <div className="display mt-4 text-5xl">$0.01</div>
+      <div className="mt-4 flex items-center gap-3">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/usdg-token.png" alt="USDG" width={40} height={40} className="h-10 w-10" />
+        <span className="font-serif text-[56px] leading-none">0.01</span>
+        <span className="mb-1.5 self-end font-mono text-[13px] text-ink-3">USDG</span>
+      </div>
       <dl className="mt-6 divide-y divide-line text-sm">
         {rows.map(([k, v]) => (
           <div key={k} className="flex justify-between gap-4 py-2.5">

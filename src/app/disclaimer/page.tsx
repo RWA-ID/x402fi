@@ -28,6 +28,14 @@ export default function Disclaimer() {
         <li>Smart contracts, including those that settle on-chain listings such as name registrations, may contain bugs despite testing.</li>
       </ul>
 
+      <H>Trademarks</H>
+      <p>
+        USDG, Global Dollar and the USDG logos are trademarks of Paxos or its affiliates. Robinhood, Robinhood Chain and their
+        logos are trademarks of Robinhood Markets, Inc. or its affiliates. Other names and logos belong to their owners.{" "}
+        {LEGAL.site} shows these marks only to identify the stablecoin and network its payments use. Showing them does not mean
+        Paxos, Robinhood or any other owner is affiliated with, endorses or sponsors {LEGAL.site}.
+      </p>
+
       <H>Third-party listings</H>
       <p>
         Services listed on {LEGAL.site} are offered by independent sellers. We do not endorse, audit or guarantee any listing,

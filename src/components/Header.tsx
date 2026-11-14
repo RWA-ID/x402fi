@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { Logo } from "./Logo";
-import { ThemeToggle } from "./ThemeToggle";
 import { MobileNav } from "./MobileNav";
 import { WalletButton } from "./WalletButton";
 
@@ -23,11 +22,9 @@ export function Header() {
           <Link href="/dashboard" className="rounded-md px-3 py-2 text-[0.95rem] text-ink-2 hover:bg-card hover:text-ink">Dashboard</Link>
           <Link href="/sell/new" className="btn btn-primary ml-2 py-2">List a service</Link>
           <span className="ml-2"><WalletButton /></span>
-          <ThemeToggle />
         </nav>
         <div className="flex items-center gap-1 lg:hidden">
           <WalletButton compact />
-          <ThemeToggle />
           <MobileNav />
         </div>
       </div>

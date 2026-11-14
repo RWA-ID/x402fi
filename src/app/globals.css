@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
-/* x402Fi tokens. Light = cream + forest; dark = near-black + sand. */
+/* x402Fi tokens. Light only: dark mode was retired 2026-11-13. */
 :root {
   --bg: #f3f1ec;
   --bg-elev: #ece9e1;
   --card: #e7e3d8;
   --ink: #141814;
   --ink-2: #4a524a;
-  --ink-3: #7d837a;
+  --ink-3: #6f756c;
   --line: #dcd7ca;
   --forest: #283a2a;
   --forest-2: #34493a;
@@ -19,51 +19,15 @@
   --bad: #9b2c24;
   --chip-bg: var(--forest);
   --chip-ink: #f3f1ec;
+  --accent: #2f6b3a;
+  --accent-ink: #f3f1ec;
+  --verified-ink: #24502c;
+  --shadow: rgba(20, 32, 20, 0.35);
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #121512;
-    --bg-elev: #191d19;
-    --card: #1f241f;
-    --ink: #eeebe3;
-    --ink-2: #b6b9ae;
-    --ink-3: #848a80;
-    --line: #2b322b;
-    --forest: #1c2a1e;
-    --forest-2: #263628;
-    --forest-ink: #eeebe3;
-    --sand: #ede3c8;
-    --sand-ink: #1d2a1f;
-    --good: #7cc48a;
-    --warn: #e0b060;
-    --bad: #ec8a80;
-    --chip-bg: var(--sand);
-    --chip-ink: #1d2a1f;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #121512;
-  --bg-elev: #191d19;
-  --card: #1f241f;
-  --ink: #eeebe3;
-  --ink-2: #b6b9ae;
-  --ink-3: #848a80;
-  --line: #2b322b;
-  --forest: #1c2a1e;
-  --forest-2: #263628;
-  --forest-ink: #eeebe3;
-  --sand: #ede3c8;
-  --sand-ink: #1d2a1f;
-  --good: #7cc48a;
-  --warn: #e0b060;
-  --bad: #ec8a80;
-  --chip-bg: var(--sand);
-  --chip-ink: #1d2a1f;
-  color-scheme: dark;
-}
+/* Lets the card spotlight fade in and out. */
+@property --sa { syntax: '<percentage>'; inherits: false; initial-value: 0%; }
 
 @theme inline {
   --color-bg: var(--bg);
@@ -81,6 +45,11 @@
   --color-good: var(--good);
   --color-warn: var(--warn);
   --color-bad: var(--bad);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-chip: var(--chip-bg);
+  --color-chip-ink: var(--chip-ink);
+  --color-verified-ink: var(--verified-ink);
   --font-serif: var(--font-display), "Iowan Old Style", Georgia, serif;
   --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-code), ui-monospace, SFMono-Regular, monospace;
@@ -102,8 +71,6 @@ body {
 .btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-primary { background: var(--forest); color: var(--forest-ink); }
-:root[data-theme="dark"] .btn-primary { background: var(--sand); color: var(--sand-ink); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn-primary { background: var(--sand); color: var(--sand-ink); } }
 .btn-primary:hover { opacity: .92; }
 .btn-ghost { background: var(--card); color: var(--ink); }
 .btn-ghost:hover { background: var(--line); }
@@ -111,16 +78,34 @@ body {
 
 .field { width: 100%; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.7rem 0.85rem; color: var(--ink); font-family: var(--font-mono); font-size: 0.9rem; }
 .field:focus { outline: 2px solid var(--forest); outline-offset: 1px; }
-:root[data-theme="dark"] .field:focus { outline-color: var(--sand); }
 .field::placeholder { color: var(--ink-3); }
 
 .card { background: var(--bg-elev); border: 1px solid var(--line); border-radius: 1rem; }
 
-/* tick-bar divider */
-.ticks { height: 56px; background-image: repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 22px); mask-image: linear-gradient(to bottom, transparent 40%, #000 40%); border-radius: 3px; }
+/* Cursor spotlight cards. SpotlightCards sets --mx/--my/--sa; --sr is the glow radius, --sbg the base. */
+.spot {
+  --sr: 380px;
+  --sbg: var(--bg-elev);
+  background: radial-gradient(var(--sr) circle at var(--mx, 50%) var(--my, 0%), color-mix(in oklab, var(--accent) var(--sa), transparent), transparent 70%) var(--sbg);
+  transition: --sa .35s ease, border-color .2s, transform .25s cubic-bezier(.2,.7,.2,1), box-shadow .25s;
+}
+.spot:hover { transform: translateY(-3px); border-color: color-mix(in oklab, var(--accent) 40%, var(--line)); box-shadow: 0 18px 40px -24px var(--shadow); }
+.spot-feature { --sr: 360px; --sbg: var(--card); }
+.spot-audience { --sr: 420px; }
+.spot-audience:hover { box-shadow: 0 22px 44px -26px var(--shadow); }
+.spot-listing { transition: --sa .35s ease, transform .3s cubic-bezier(.2,.7,.2,1), box-shadow .3s, border-color .2s; }
+.spot-listing:hover { transform: translateY(-4px); border-color: color-mix(in oklab, var(--accent) 45%, var(--line)); box-shadow: 0 26px 50px -28px var(--shadow); }
+@media (prefers-reduced-motion: reduce) {
+  .spot, .spot * { transition: none !important; animation: none !important; }
+  .spot:hover { transform: none; }
+}
+
+/* Hero dot grid */
+.hero-dots { background-image: radial-gradient(var(--line) 1.2px, transparent 1.2px); background-size: 24px 24px; mask-image: radial-gradient(ellipse 65% 60% at 50% 45%, #000 15%, transparent 75%); -webkit-mask-image: radial-gradient(ellipse 65% 60% at 50% 45%, #000 15%, transparent 75%); }
 
 @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-.marquee { animation: marquee 40s linear infinite; }
+.marquee { animation: marquee 48s linear infinite; }
+.marquee-fade { mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
 @media (prefers-reduced-motion: reduce) { .marquee { animation: none; } }
 
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }

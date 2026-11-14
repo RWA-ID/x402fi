@@ -36,16 +36,18 @@ export function cardTagline(kind: ReturnType<typeof sharePrice>["kind"]): string
 
 /** Bump when the card's design changes, so every cached card is fetched again. */
 // 3: card logos fetched without WebP (2026-11-13), so cached cards with a missing logo refresh.
-export const CARD_DESIGN = 3;
+// 4: home polish (2026-11-14): dot grid, USDG token price, Robinhood Chain mark, Verified payee seal.
+export const CARD_DESIGN = 4;
 
 /**
  * A short version for a listing's card URL (?v=…): changes when anything the card draws
  * changes (name, summary, category, prices, payee name, seller logo URL, design). A logo
  * set on the payee name's ENS record is not included: that would need an ENS read per page.
  */
-export function cardVersion(l: { name: string; summary: string; category: string; identityName: string | null; logoUrl: string | null; services: Svc[] }): string {
+export function cardVersion(l: { name: string; summary: string; category: string; identityName: string | null; logoUrl: string | null; services: Svc[] }, payeeVerified = false): string {
   const p = sharePrice(l.services);
-  const key = JSON.stringify([CARD_DESIGN, l.name, l.summary, l.category, l.identityName, l.logoUrl, p.price, p.note]);
+  // The Verified seal is part of the URL, so a card that loses (or gains) it is fetched again.
+  const key = JSON.stringify([CARD_DESIGN, l.name, l.summary, l.category, l.identityName, l.logoUrl, p.price, p.note, payeeVerified]);
   let h = 0x811c9dc5; // FNV-1a, 32-bit: a cache key, not a security property
   for (let i = 0; i < key.length; i++) h = Math.imul(h ^ key.charCodeAt(i), 0x01000193);
   return (h >>> 0).toString(36);

@@ -3,6 +3,8 @@ import { robinhoodClient } from "@/lib/server/clients";
 import { envAsync } from "@/lib/server/env";
 import { payeeStatus, REASON_TEXT } from "@/lib/server/payee";
 import { HOODFI_REGISTRY } from "@/lib/names";
+import { sellerHoldsNameError } from "@/lib/server/nameHolder";
+import { currentSeller } from "@/lib/server/session";
 
 const NAME_RE = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.eth$/;
 const ownerAbi = parseAbi(["function ownerOf(uint256) view returns (address)"]);
@@ -13,6 +15,8 @@ const ownerAbi = parseAbi(["function ownerOf(uint256) view returns (address)"]);
  * verifier as the listing badge, fresh. `upstream` is set for native listings (buyers
  * contact the seller's origin); otherwise the origin is x402Fi's gateway.
  * For HoodFi names it also returns the owner, so the wizard can say which wallet signs.
+ * `holder` is the same gate publishing applies (the signed-in wallet must hold the name),
+ * so the wizard can stop before the seller writes records; null when it passes or nobody is signed in.
  */
 export async function GET(req: Request) {
   const q = new URL(req.url).searchParams;
@@ -30,7 +34,11 @@ export async function GET(req: Request) {
     }
   }
 
-  const status = await payeeStatus({ identityName: name, payTo: getAddress(payTo), origin, slug: "new", fresh: true });
+  const seller = await currentSeller();
+  const [status, holder] = await Promise.all([
+    payeeStatus({ identityName: name, payTo: getAddress(payTo), origin, slug: "new", fresh: true }),
+    seller ? sellerHoldsNameError(await envAsync(), name, seller) : Promise.resolve(null),
+  ]);
 
   let owner: string | null = null;
   if (name.endsWith(".hoodfi.eth") && name.split(".").length === 3) {
@@ -47,5 +55,6 @@ export async function GET(req: Request) {
     reason,
     reasonText: reason ? REASON_TEXT[reason] ?? reason : null,
     owner,
+    holder, // { status, error } | null
   });
 }

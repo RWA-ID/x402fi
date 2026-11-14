@@ -2,8 +2,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ListingCard } from "@/components/ListingCard";
 import type { PublicListing } from "@/lib/server/queries";
+import type { CardListing } from "@/lib/server/payeeBadges";
 
-export function MarketBrowser({ rows }: { rows: PublicListing[] }) {
+export function MarketBrowser({ rows }: { rows: CardListing[] }) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
@@ -21,7 +22,7 @@ export function MarketBrowser({ rows }: { rows: PublicListing[] }) {
     const t = q.trim().toLowerCase();
     const out = rows.filter((r) =>
       (cat === "All" || r.category === cat) &&
-      (!verifiedOnly || r.identityName) &&
+      (!verifiedOnly || r.payeeVerified === true) &&
       (!t || `${r.name} ${r.summary} ${r.description} ${r.identityName ?? ""}`.toLowerCase().includes(t)));
     // Free-only listings sort first; quote-only last.
     const key = (r: PublicListing) => (r.fromAtomic ? BigInt(r.fromAtomic) : r.hasQuote ? 10n ** 18n : 0n);
@@ -44,7 +45,7 @@ export function MarketBrowser({ rows }: { rows: PublicListing[] }) {
         </select>
         <label className="flex items-center gap-2 text-sm text-ink-2">
           <input type="checkbox" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} className="h-4 w-4 accent-[var(--forest)]" />
-          Named payees only
+          Verified payees only
         </label>
       </div>
       <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
