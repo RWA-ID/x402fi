@@ -11,7 +11,16 @@ import { TryIt } from "@/app/market/[slug]/TryIt";
 import { parseLogo, parseWebsite, parseXHandle } from "@/lib/profile";
 import { formatUsd } from "@/lib/x402/money";
 import { NO_FEE_TREASURY, X402ID_FORWARDER, X402ID_PARENTS, X402ID_REGISTRAR, toLabel, type NameSuggestion } from "@/lib/names";
-import type { Draft } from "./Wizard";
+
+/** What the name step needs to know about a listing: a wizard draft, or a published listing in the dashboard. */
+export interface NameContext {
+  name: string;
+  payTo: string;
+  identityName: string;
+  /** Buyers call the seller's own URL, so that is the origin the name must list. */
+  native: boolean;
+  upstreamUrl: string;
+}
 
 type Brand = "hoodfi" | "x402";
 /** What the seller picked: a new name to register, or one they already own. */
@@ -26,7 +35,11 @@ export function BrandIcon({ brand, size = 28 }: { brand: Brand; size?: number })
 
 const fullName = (p: Pick) => (p.kind === "own" ? p.name : p.brand === "hoodfi" ? `${p.label}.hoodfi.eth` : `${p.label}.${p.parent}`);
 
-export function IdentityStep({ d, set }: { d: Draft; set: <K extends keyof Draft>(k: K, v: Draft[K]) => void }) {
+/**
+ * `onName` gets the name once it is one the seller holds (or "" when they clear it).
+ * `dashboard`: the listing is already published, so the copy does not talk about wizard steps.
+ */
+export function IdentityStep({ d, onName, dashboard = false }: { d: NameContext; onName: (name: string) => void; dashboard?: boolean }) {
   const [pick, setPick] = useState<Pick | null>(() => (d.identityName ? { kind: "own", name: d.identityName } : null));
   const [parent, setParent] = useState(X402ID_PARENTS[0]!.label);
   const [custom, setCustom] = useState("");
@@ -55,7 +68,7 @@ export function IdentityStep({ d, set }: { d: Draft; set: <K extends keyof Draft
 
   const choose = (p: Pick | null) => {
     setPick(p);
-    set("identityName", p && p.kind === "own" ? p.name : "");
+    onName(p && p.kind === "own" ? p.name : "");
   };
 
   return (
@@ -120,12 +133,12 @@ export function IdentityStep({ d, set }: { d: Draft; set: <K extends keyof Draft
       {pick?.kind !== "new" && (
         <section className="space-y-4">
           {!pick && <div className="flex items-center gap-3 text-xs uppercase tracking-[0.16em] text-ink-3"><span className="h-px flex-1 bg-line" />or<span className="h-px flex-1 bg-line" /></div>}
-          <OwnName d={d} origin={origin} value={ownInput} onChange={setOwnInput} picked={pick?.kind === "own" ? pick.name : null}
+          <OwnName d={d} origin={origin} dashboard={dashboard} value={ownInput} onChange={setOwnInput} picked={pick?.kind === "own" ? pick.name : null}
             onUse={(name) => choose(name ? { kind: "own", name } : null)} />
         </section>
       )}
 
-      {!pick && (
+      {!pick && !dashboard && (
         <p className="text-center text-sm text-ink-3">
           No name yet? You can <strong>skip</strong> and add one later from the dashboard. Buyers will see only your wallet address until then.
         </p>
@@ -269,7 +282,7 @@ function MintX402({ pick, onDone }: { pick: Extract<Pick, { kind: "new" }>; onDo
 }
 
 /** A name the seller owns (or just registered): check it, and write records only if needed. */
-function OwnName({ d, origin, value, onChange, picked, onUse }: { d: Draft; origin: string; value: string; onChange: (v: string) => void; picked: string | null; onUse: (name: string | null) => void }) {
+function OwnName({ d, origin, dashboard, value, onChange, picked, onUse }: { d: NameContext; origin: string; dashboard: boolean; value: string; onChange: (v: string) => void; picked: string | null; onUse: (name: string | null) => void }) {
   const [check, setCheck] = useState<Check | null>(null);
   const [checking, setChecking] = useState(false);
   const [err, setErr] = useState("");
@@ -279,7 +292,7 @@ function OwnName({ d, origin, value, onChange, picked, onUse }: { d: Draft; orig
 
   const run = async (n = name) => {
     if (!/^[a-z0-9-]+(\.[a-z0-9-]+)*\.eth$/.test(n)) { setErr("Enter a full name, like acme.hoodfi.eth or acme.402api.eth."); return; }
-    if (!isAddress(d.payTo, { strict: false })) { setErr("Set your payout wallet on the Endpoints step first."); return; }
+    if (!isAddress(d.payTo, { strict: false })) { setErr(dashboard ? "Set a valid payout wallet first." : "Set your payout wallet on the Endpoints step first."); return; }
     setErr(""); setChecking(true);
     const qs = new URLSearchParams({ name: n, payTo: d.payTo, ...(d.native ? { upstream: d.upstreamUrl } : {}) });
     const r = await fetch(`/api/names/check?${qs}`, { signal: AbortSignal.timeout(20_000) }).then((r) => r.json() as Promise<Check & { error?: string; holder?: { status: number; error: string } | null }>).catch(() => null);
@@ -325,9 +338,9 @@ function OwnName({ d, origin, value, onChange, picked, onUse }: { d: Draft; orig
           </div>
           <div className="p-5">
             {check?.state === "verified" ? (
-              <p className="flex items-start gap-2 text-good"><span aria-hidden>✓</span><span><strong>{picked}</strong> already points at this listing and pays <span className="font-mono">{d.payTo.slice(0, 6)}…{d.payTo.slice(-4)}</span>. Nothing to sign. Continue.</span></p>
+              <p className="flex items-start gap-2 text-good"><span aria-hidden>✓</span><span><strong>{picked}</strong> already points at this listing and pays <span className="font-mono">{d.payTo.slice(0, 6)}…{d.payTo.slice(-4)}</span>. Nothing to sign.{dashboard ? "" : " Continue."}</span></p>
             ) : check ? (
-              <Records d={d} origin={origin} name={picked} hoodfi={hoodfi} reason={check.reasonText} owner={check.owner} onWritten={() => run(picked)} />
+              <Records d={d} origin={origin} dashboard={dashboard} name={picked} hoodfi={hoodfi} reason={check.reasonText} owner={check.owner} onWritten={() => run(picked)} />
             ) : null}
           </div>
         </div>
@@ -336,7 +349,7 @@ function OwnName({ d, origin, value, onChange, picked, onUse }: { d: Draft; orig
   );
 }
 
-function Records({ d, origin, name, hoodfi, reason, owner, onWritten }: { d: Draft; origin: string; name: string; hoodfi: boolean; reason: string | null; owner: string | null; onWritten: () => void }) {
+function Records({ d, origin, dashboard, name, hoodfi, reason, owner, onWritten }: { d: NameContext; origin: string; dashboard: boolean; name: string; hoodfi: boolean; reason: string | null; owner: string | null; onWritten: () => void }) {
   const { address, isConnected } = useAccount();
   const { open } = useAppKit();
   const ens = useWritePayee();
@@ -390,7 +403,7 @@ function Records({ d, origin, name, hoodfi, reason, owner, onWritten }: { d: Dra
       </button>
       {writer.hash && <a className="mt-2 block text-center text-sm underline" href={hoodfi ? `https://robinhoodchain.blockscout.com/tx/${writer.hash}` : `https://etherscan.io/tx/${writer.hash}`} target="_blank" rel="noreferrer">View transaction</a>}
       {writer.error && <p className="mt-3 text-sm text-bad">{writer.error}</p>}
-      <p className="mt-3 text-xs text-ink-3">You can also continue now and do this later from the dashboard. The badge appears once the records are onchain.</p>
+      <p className="mt-3 text-xs text-ink-3">{dashboard ? "The badge appears once the records are onchain." : "You can also continue now and do this later from the dashboard. The badge appears once the records are onchain."}</p>
     </div>
   );
 }

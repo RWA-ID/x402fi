@@ -1,13 +1,14 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SignInGate } from "@/components/SignInGate";
 import { formatUsd } from "@/lib/x402/money";
 import { txUrl } from "@/lib/chains";
 import { useSession } from "@/lib/client/useSession";
+import { IdentityStep } from "@/app/sell/new/IdentityStep";
 import { EndpointsEditor } from "./EndpointsEditor";
 
-interface L { id: string; slug: string; name: string; status: "draft" | "live" | "paused"; priceAtomic: string; payTo: string; identityName: string | null; logoUrl: string | null; websiteUrl: string | null; xHandle: string | null; revenueAtomic: string; calls: number; missingExamples?: string[] }
+interface L { id: string; slug: string; name: string; status: "draft" | "live" | "paused"; priceAtomic: string; payTo: string; identityName: string | null; upstreamUrl: string; native: boolean; logoUrl: string | null; websiteUrl: string | null; xHandle: string | null; revenueAtomic: string; calls: number; missingExamples?: string[] }
 interface P { id: string; listingId: string; serviceId: string | null; payer: string; amountAtomic: string; status: string; txHash: string | null; error: string | null; createdAt: number; requestPath: string }
 interface Data { listings: L[]; payments: P[]; serviceNames: Record<string, string>; daily: { day: string; revenueAtomic: string; calls: number }[]; totals: { revenueAtomic: string; calls: number; failed: number } }
 
@@ -42,7 +43,7 @@ function Inner({ seller }: { seller: string }) {
     const j = (await r.json().catch(() => ({}))) as { error?: string; upstreamSecret?: string };
     if (!r.ok) alertInline(j.error ?? "Update failed");
     await load();
-    return j;
+    return { ...j, ok: r.ok };
   };
   const [notice, setNotice] = useState("");
   const alertInline = (m: string) => { setNotice(m); setTimeout(() => setNotice(""), 6000); };
@@ -132,12 +133,23 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
   );
 }
 
-function ListingRow({ l, patch, notify, reload }: { l: L; patch: (id: string, b: object) => Promise<{ upstreamSecret?: string }>; notify: (m: string) => void; reload: () => void }) {
+function ListingRow({ l, patch, notify, reload }: { l: L; patch: (id: string, b: object) => Promise<{ upstreamSecret?: string; ok: boolean }>; notify: (m: string) => void; reload: () => void }) {
   const [editing, setEditing] = useState<null | "payTo" | "name" | "profile">(null);
   const [prof, setProf] = useState({ logoUrl: "", websiteUrl: "", xHandle: "" });
   const [profErr, setProfErr] = useState("");
   const [val, setVal] = useState("");
   const [secret, setSecret] = useState("");
+  // The name step reports a name each time it re-checks it: save it once.
+  const savedName = useRef(l.identityName ?? "");
+  const saveName = async (name: string) => {
+    // Clearing the field in the panel is not a removal: "Remove name" does that.
+    if (!name || name === savedName.current) return;
+    const before = savedName.current;
+    savedName.current = name;
+    const j = await patch(l.id, { identityName: name });
+    if (j.ok) notify(`${name} is now the named payee of ${l.name}.`);
+    else savedName.current = before;
+  };
   return (
     <div className="card p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -157,7 +169,7 @@ function ListingRow({ l, patch, notify, reload }: { l: L; patch: (id: string, b:
             <button className="btn btn-ghost py-2" onClick={() => patch(l.id, { status: "live" })}>Go live</button>
           )}
           <button className="btn btn-ghost py-2" onClick={() => { setEditing("payTo"); setVal(l.payTo); }}>Change payout</button>
-          <button className="btn btn-ghost py-2" onClick={() => { setEditing("name"); setVal(l.identityName ?? ""); }}>Named payee</button>
+          <button className="btn btn-ghost py-2" onClick={() => setEditing(editing === "name" ? null : "name")}>{l.identityName ? "Named payee" : "Add a payee name"}</button>
           <button className="btn btn-ghost py-2" onClick={() => { setEditing("profile"); setProfErr(""); setProf({ logoUrl: l.logoUrl ?? "", websiteUrl: l.websiteUrl ?? "", xHandle: l.xHandle ? "@" + l.xHandle : "" }); }}>Profile</button>
           <button className="btn btn-ghost py-2" onClick={async () => { const j = await patch(l.id, { rotateSecret: true }); if (j.upstreamSecret) { setSecret(j.upstreamSecret); notify("New secret issued. Update your API now: the old one stops being sent immediately."); } }}>Rotate secret</button>
         </div>
@@ -183,11 +195,23 @@ function ListingRow({ l, patch, notify, reload }: { l: L; patch: (id: string, b:
           </div>
         </div>
       )}
-      {editing && editing !== "profile" && (
+      {editing === "payTo" && (
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <input className="field" value={val} onChange={(e) => setVal(e.target.value)} placeholder={editing === "payTo" ? "0x…" : "yourco.402api.eth (empty to remove)"} spellCheck={false} />
-          <button className="btn btn-primary" onClick={async () => { await patch(l.id, editing === "payTo" ? { payTo: val } : { identityName: val || null }); setEditing(null); }}>Save</button>
+          <input className="field" value={val} onChange={(e) => setVal(e.target.value)} placeholder="0x…" spellCheck={false} />
+          <button className="btn btn-primary" onClick={async () => { await patch(l.id, { payTo: val }); setEditing(null); }}>Save</button>
           <button className="btn btn-ghost" onClick={() => setEditing(null)}>Cancel</button>
+        </div>
+      )}
+      {editing === "name" && (
+        <div className="mt-4 rounded-xl border border-line p-5">
+          {/* The wizard's name step: register a name or use one you hold, then write its records. */}
+          <IdentityStep dashboard d={{ name: l.name, payTo: l.payTo, identityName: l.identityName ?? "", native: l.native, upstreamUrl: l.upstreamUrl }} onName={saveName} />
+          <div className="mt-6 flex flex-wrap gap-2 border-t border-line pt-4">
+            <button className="btn btn-ghost" onClick={() => setEditing(null)}>Close</button>
+            {l.identityName && (
+              <button className="btn btn-ghost" onClick={async () => { const j = await patch(l.id, { identityName: null }); if (j.ok) { savedName.current = ""; setEditing(null); } }}>Remove {l.identityName}</button>
+            )}
+          </div>
         </div>
       )}
       {editing === "payTo" && l.identityName && <p className="mt-2 text-xs text-warn">After changing the payout, update the Robinhood Chain address on {l.identityName} too, or the payee check will fail.</p>}

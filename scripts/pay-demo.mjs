@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // Pays one x402Fi endpoint from a local wallet and prints the result.
+// A seller's own x402 v1 endpoint (a native listing) works too: it is paid with X-PAYMENT.
 // Run it yourself:   node scripts/pay-demo.mjs [url] [envFile] [envVar]
 // Defaults: the $0.01 demo, ~/hoodfi-eth/contracts/.env, PRIVATE_KEY.
 // The key is read at run time and never printed. Refuses anything above $0.01.
@@ -33,12 +34,20 @@ const first = await fetch(url, { method, headers: baseHeaders, body: reqBody });
 if (first.status !== 402) { console.error(`expected 402, got ${first.status}: ${await first.text()}`); process.exit(1); }
 const pr = await first.json();
 const req = pr.accepts[0];
-if (BigInt(req.amount) > MAX_ATOMIC) { console.error(`refusing: price ${Number(req.amount) / 1e6} USDG is above the ${Number(MAX_ATOMIC) / 1e6} USDG test cap (set MAX_USDG to raise it)`); process.exit(1); }
-console.log(`quote        ${Number(req.amount) / 1e6} USDG → ${req.payTo} on ${req.network}`);
+// x402 v1 (a seller's own endpoint): the amount is `maxAmountRequired`, the header X-PAYMENT.
+const v1 = pr.x402Version === 1;
+const amount = v1 ? req.maxAmountRequired : req.amount;
+if (!amount || !/^\d+$/.test(amount)) { console.error(`no usable amount in the 402: ${JSON.stringify(req).slice(0, 300)}`); process.exit(1); }
+// This script signs for USDG on Robinhood Chain only, whatever the 402 asks for.
+if (getAddress(req.asset) !== USDG) { console.error(`refusing: the 402 asks for token ${req.asset}, not USDG`); process.exit(1); }
+if (req.scheme !== "exact") { console.error(`refusing: scheme ${req.scheme}`); process.exit(1); }
+if (BigInt(amount) > MAX_ATOMIC) { console.error(`refusing: price ${Number(amount) / 1e6} USDG is above the ${Number(MAX_ATOMIC) / 1e6} USDG test cap (set MAX_USDG to raise it)`); process.exit(1); }
+console.log(`quote        ${Number(amount) / 1e6} USDG → ${req.payTo} on ${req.network}${v1 ? " (x402 v1)" : ""}`);
 
 const message = {
-  from: account.address, to: getAddress(req.payTo), value: BigInt(req.amount),
-  validAfter: 0n, validBefore: BigInt(Math.floor(Date.now() / 1000) + 600),
+  from: account.address, to: getAddress(req.payTo), value: BigInt(amount),
+  // v1: no longer than the seller's own window.
+  validAfter: 0n, validBefore: BigInt(Math.floor(Date.now() / 1000) + (v1 && Number(req.maxTimeoutSeconds) > 0 ? Math.min(600, Number(req.maxTimeoutSeconds)) : 600)),
   nonce: toHex(crypto.getRandomValues(new Uint8Array(32))),
 };
 const signature = await account.signTypedData({
@@ -50,20 +59,21 @@ const signature = await account.signTypedData({
   primaryType: "TransferWithAuthorization",
   message,
 });
-const payment = {
-  x402Version: 2, resource: pr.resource, accepted: req,
-  payload: { signature, authorization: { ...message, value: message.value.toString(), validAfter: "0", validBefore: message.validBefore.toString() } },
-};
+const payload = { signature, authorization: { ...message, value: message.value.toString(), validAfter: "0", validBefore: message.validBefore.toString() } };
+const payment = v1
+  ? { x402Version: 1, scheme: req.scheme, network: req.network, payload }
+  : { x402Version: 2, resource: pr.resource, accepted: req, payload };
 
 const t0 = Date.now();
-const paid = await fetch(url, { method, headers: { ...baseHeaders, "PAYMENT-SIGNATURE": b64(payment) }, body: reqBody });
+const paid = await fetch(url, { method, headers: { ...baseHeaders, [v1 ? "X-PAYMENT" : "PAYMENT-SIGNATURE"]: b64(payment) }, body: reqBody });
 const body = await paid.text();
 console.log(`status       ${paid.status} in ${Date.now() - t0} ms`);
-const rcpt = paid.headers.get("payment-response");
+const rcpt = paid.headers.get(v1 ? "x-payment-response" : "payment-response");
 if (rcpt) {
   const s = JSON.parse(Buffer.from(rcpt, "base64").toString());
-  console.log(`settled      ${s.success} tx ${s.transaction}`);
-  console.log(`explorer     https://robinhoodchain.blockscout.com/tx/${s.transaction}`);
+  const tx = s.transaction ?? s.txHash;
+  console.log(`settled      ${s.success} tx ${tx}`);
+  console.log(`explorer     https://robinhoodchain.blockscout.com/tx/${tx}`);
 }
 const r = paid.headers.get("x-x402fi-receipt");
 if (r) console.log(`receipt      ${new URL(url).origin}${r}`);

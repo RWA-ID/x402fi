@@ -125,7 +125,7 @@ export function Wizard() {
       <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
         {step === 0 && <StepService d={d} set={set} errors={errors} />}
         {step === 1 && <StepEndpoints d={d} set={set} errors={errors} />}
-        {step === 2 && <IdentityStep d={d} set={set} />}
+        {step === 2 && <IdentityStep d={d} onName={(n) => set("identityName", n)} />}
         {step === 3 && <StepTest d={d} />}
         {step === 4 && <StepLive d={d} onDone={() => { try { localStorage.removeItem(KEY); } catch {} }} />}
 
