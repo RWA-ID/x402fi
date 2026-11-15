@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchService, pathMatches, quoteRequestPath, parseQuote, normalizePath, allowedMethods, labelFromPath, type ServiceLike } from "@/lib/gateway/services";
+import { matchService, pathMatches, quoteRequestPath, parseQuote, normalizePath, allowedMethods, labelFromPath, hasUnsafeSegment, type ServiceLike } from "@/lib/gateway/services";
 
 const svc = (o: Partial<ServiceLike> & { id: string }): ServiceLike => ({
   method: "GET", path: "/", pricing: "fixed", priceAtomic: "1000", quotePath: null, maxPriceAtomic: null, status: "live", sortOrder: 0, ...o,
@@ -72,5 +72,30 @@ describe("quotes", () => {
     // $0.01 minimum: a quote below it would cost more in gas than it pays.
     expect(parseQuote({ amount: "9999" }, "15000000")).toMatchObject({ ok: false, reason: "quote_below_minimum" });
     expect(parseQuote({ price: "0.01" }, "15000000")).toEqual({ ok: true, amountAtomic: 10_000n });
+  });
+});
+
+describe("unsafe path segments", () => {
+  // Next.js decodes each catch-all segment, so "/docs/..%2Fpremium" arrives as ["docs", "../premium"].
+  it("refuses dot segments and separators inside a segment", () => {
+    expect(hasUnsafeSegment(["docs", "../premium"])).toBe(true);
+    expect(hasUnsafeSegment(["basic", "../premium"])).toBe(true);
+    expect(hasUnsafeSegment(["open", "../../../internal"])).toBe(true);
+    expect(hasUnsafeSegment(["docs", ".."])).toBe(true);
+    expect(hasUnsafeSegment(["docs", "."])).toBe(true);
+    expect(hasUnsafeSegment(["docs", "a/b"])).toBe(true);
+    expect(hasUnsafeSegment(["docs", "..\\premium"])).toBe(true);
+    expect(hasUnsafeSegment(["docs", "a\nb"])).toBe(true);
+  });
+  it("lets ordinary paths through", () => {
+    expect(hasUnsafeSegment([])).toBe(false);
+    expect(hasUnsafeSegment(["v1", "preflight"])).toBe(false);
+    expect(hasUnsafeSegment(["register", "alice.b"])).toBe(false);
+    expect(hasUnsafeSegment(["files", "..hidden", "a..b", "x.y.z"])).toBe(false);
+    expect(hasUnsafeSegment(["q", "a b", "caf\u00e9", "50%"])).toBe(false);
+  });
+  it("documents why: the unsafe path is priced as the cheap endpoint", () => {
+    const all = [svc({ id: "docs", path: "/docs", pricing: "free", priceAtomic: null }), svc({ id: "premium", path: "/premium", priceAtomic: "5000000" })];
+    expect(matchService(all, "GET", "/docs/../premium")?.id).toBe("docs");
   });
 });

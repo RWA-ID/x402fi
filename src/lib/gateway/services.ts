@@ -20,6 +20,16 @@ export function normalizePath(p: string): string {
   return s || "/";
 }
 
+/**
+ * True when a decoded path segment could make the path that is priced differ from the
+ * path that is forwarded: a dot segment (the URL parser resolves it when the upstream
+ * URL is built) or a separator inside a segment ("..%2Fpremium" arrives as "../premium").
+ * The gateway refuses such a request before it matches an endpoint.
+ */
+export function hasUnsafeSegment(path: string[]): boolean {
+  return path.some((seg) => seg === "." || seg === ".." || /[\/\\]/.test(seg) || /[\u0000-\u001f]/.test(seg));
+}
+
 /** True when `requestPath` is `prefix` or lies under it. */
 export function pathMatches(prefix: string, requestPath: string): boolean {
   const pre = normalizePath(prefix);

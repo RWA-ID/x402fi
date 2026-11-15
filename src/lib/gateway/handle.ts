@@ -11,7 +11,7 @@ import { assertSafeUrl, UnsafeUrlError } from "@/lib/ssrf";
 import { db, envAsync } from "@/lib/server/env";
 import { robinhoodClient, settlementWallet } from "@/lib/server/clients";
 import { GET as demoEcho } from "@/app/api/demo/echo/route";
-import { allowedMethods, labelFromPath, matchService, parseQuote, quoteRequestPath } from "./services";
+import { allowedMethods, hasUnsafeSegment, labelFromPath, matchService, parseQuote, quoteRequestPath } from "./services";
 import { parseContractConfig, quoteLabel, settleViaContract } from "@/lib/x402/contract";
 import { txUrl } from "@/lib/chains";
 import { checkDelivery, type DeliveryCheck } from "@/lib/delivery";
@@ -89,7 +89,9 @@ async function forward(listing: Listing, req: Request, requestPath: string, sear
   await assertSafeUrl(target.toString());
   const headers = new Headers();
   req.headers.forEach((val, key) => {
-    if (!HOP.has(key.toLowerCase()) && !key.toLowerCase().startsWith("cf-")) headers.set(key, val);
+    const k = key.toLowerCase();
+    // x-x402fi-* is the gateway's own: a caller must not be able to claim a payer.
+    if (!HOP.has(k) && !k.startsWith("cf-") && !k.startsWith("x-x402fi-")) headers.set(key, val);
   });
   headers.set("x-x402fi-secret", listing.upstreamSecret);
   if (payer) headers.set("x-x402fi-payer", payer);
@@ -149,6 +151,9 @@ export async function handleGateway(req: Request, slug: string, path: string[]):
   const listing = await d.query.listings.findFirst({ where: eq(listings.slug, slug) });
   if (!listing || listing.status === "draft") return json(404, { error: "No service at this address." });
   if (listing.status === "paused") return json(503, { error: "This service is paused by its owner." });
+
+  // An encoded "../" would be priced as one endpoint and forwarded to another.
+  if (hasUnsafeSegment(path)) return json(400, { error: "This path is not allowed: it contains a dot segment or an encoded slash. Nothing was charged." });
 
   const incoming = new URL(req.url);
   const requestPath = "/" + path.join("/");
