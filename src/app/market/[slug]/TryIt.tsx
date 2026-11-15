@@ -50,9 +50,9 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
       setBusy(true); setLog([{ t: `${method} ${url}` }]); setResult(null);
       try {
         const r = await fetch(url, init);
-        push({ t: `${r.status} ${r.ok ? "OK · free, no payment" : ""}`, tone: r.ok ? "ok" : "bad" });
+        push({ t: `${r.status} ${r.ok ? "OK · example request, free" : ""}`, tone: r.ok ? "ok" : "bad" });
         const bytes = new Uint8Array(await r.arrayBuffer());
-        show({ bytes, contentType: r.headers.get("content-type") ?? "", status: r.status, paidLabel: r.ok ? "Free, no payment" : `Error ${r.status}`, request: `${method} ${url}` });
+        show({ bytes, contentType: r.headers.get("content-type") ?? "", status: r.status, paidLabel: r.ok ? "Example request · free" : `Error ${r.status}`, request: `${method} ${url}` });
       } catch (e) {
         push({ t: (e as Error).message, tone: "bad" });
       } finally { setBusy(false); }
@@ -126,8 +126,9 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
         </div>
       )}
       <button onClick={run} disabled={busy} className={`btn w-full ${pricing === "free" ? "btn-ghost" : "btn-primary"}`}>
-        {busy ? "Working…" : pricing === "free" ? "Try it · free" : !isConnected ? (nameEntry?.cta ? "Connect wallet to register" : "Connect a wallet to try it") : nameEntry ? nameEntry.cta ?? "Check price, then register" : `Try it · ${pricing === "quote" ? "see price, then pay" : `pay ${priceLabel}`}`}
+        {busy ? "Working…" : pricing === "free" ? "Try the example · free" : !isConnected ? (nameEntry?.cta ? "Connect wallet to register" : "Connect a wallet to try it") : nameEntry ? nameEntry.cta ?? "Check price, then register" : `Try it · ${pricing === "quote" ? "see price, then pay" : `pay ${priceLabel}`}`}
       </button>
+      {pricing === "free" && !nameEntry && <p className="mt-2 text-center text-xs text-ink-3">Runs the seller&apos;s example request shown above.</p>}
       {pricing !== "free" && <p className="mt-2 text-center text-xs text-ink-3">Needs USDG on Robinhood Chain. No gas: x402Fi pays it.</p>}
       {log.length > 0 && (
         <ol className="mt-4 space-y-1 rounded-lg bg-forest p-3 font-mono text-[0.75rem] text-forest-ink">
