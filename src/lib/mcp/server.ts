@@ -119,10 +119,11 @@ export function createServer(origin: string): McpServer {
           const url = native ? nativeUrl(base, s.path, null) : `${origin}/g/${l.slug}${s.path === "/" ? "" : s.path}`;
           let atomic: string | null = s.pricing === "fixed" ? s.priceAtomic : s.pricing === "free" ? "0" : s.maxPriceAtomic;
           let version: 1 | 2 = 2;
+          let sellerText: string | null = null;
           if (native) {
             const p = await probeNative(nativeUrl(base, s.path, s.exampleRequest), s.method, s.exampleBody);
             atomic = p.ok ? p.quote.amount : null;
-            if (p.ok) version = p.quote.x402Version;
+            if (p.ok) { version = p.quote.x402Version; sellerText = p.quote.description; }
           }
           return {
             url,
@@ -133,7 +134,7 @@ export function createServer(origin: string): McpServer {
             paid_directly_to_seller: s.pricing === "native",
             ...(s.pricing === "free" ? {} : { x402_version: version, payment_header: paymentHeader(version) }),
             how_to_call: bazaarExtension(s, new URL(url).pathname).info,
-            seller_description: s.summary || null,
+            seller_description: s.summary || sellerText || null,
           };
         }),
       ]);
@@ -227,7 +228,7 @@ export function createServer(origin: string): McpServer {
 /** A native endpoint is paid to the seller directly; x402Fi only reads its 402. */
 async function nativeRequirements(url: string, method: string, body: string | null, listedPayee: string | null) {
   const p = await probeNative(url, method, body, { fresh: true });
-  if (!p.ok) return fail(`The seller's endpoint did not return a usable 402: ${p.reason}.`);
+  if (!p.ok) return fail(`The seller's endpoint did not return a usable 402: ${p.reason}.${method !== "GET" && method !== "DELETE" ? " A seller may check the request before it asks for payment: pass the JSON `body` you will send (get_listing shows an example)." : ""}`);
   return json({
     notice: UNTRUSTED,
     url,

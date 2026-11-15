@@ -81,7 +81,8 @@ export async function discoveryFeed(origin: string, q: DiscoveryQuery = {}) {
           // The seller's own x402 version: a v1 endpoint is listed as v1, with a v1 payment option.
           x402Version: p.quote.x402Version,
           description,
-          accepts: [nativeAccept(p.quote, url, s.summary || l.summary)],
+          // The option carries the seller's own description, as its 402 does.
+          accepts: [nativeAccept(p.quote, url, p.quote.description || s.summary || l.summary)],
           extensions: {
             // The seller's own declaration wins: it knows its API better than x402Fi does.
             bazaar: p.quote.bazaar ?? bazaarExtension(s, new URL(url).pathname),

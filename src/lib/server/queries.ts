@@ -41,8 +41,9 @@ async function withServices(rows: Array<Omit<PublicListing, "services" | "fromAt
   return rows.map((r) => {
     const mine = svc.filter((s) => s.listingId === r.id).map(({ quotePath: _q, createdAt: _c, updatedAt: _u, ...s }) => s);
     const live = mine.filter((s) => s.status === "live");
-    const paid = live.filter((s) => s.pricing === "fixed" && s.priceAtomic).map((s) => BigInt(s.priceAtomic!));
-    const quoteFloors = live.filter((s) => s.pricing === "quote" || s.pricing === "contract" || s.pricing === "native").length;
+    // A native endpoint keeps the price read from the seller's 402 when it was saved: that is a known price, not a quote.
+    const paid = live.filter((s) => (s.pricing === "fixed" || s.pricing === "native") && s.priceAtomic && BigInt(s.priceAtomic) > 0n).map((s) => BigInt(s.priceAtomic!));
+    const quoteFloors = live.filter((s) => s.pricing === "quote" || s.pricing === "contract" || (s.pricing === "native" && !s.priceAtomic)).length;
     const min = paid.length ? paid.reduce((a, b) => (b < a ? b : a)) : null;
     return {
       ...r,
