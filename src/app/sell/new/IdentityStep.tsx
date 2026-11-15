@@ -205,7 +205,7 @@ function RegisterPanel({ pick, onDone, onCancel }: { pick: Extract<Pick, { kind:
         {pick.brand === "hoodfi" ? (
           <>
             <Step n={1} title={`Register ${name}`} sub="Paid in USDG over x402 with one signature. No gas. The name goes to the wallet that signs." />
-            <TryIt slug="hoodfi-names" method="POST" pathAndQuery="/register" pricing="contract" priceLabel={pick.price}
+            <TryIt slug="hoodfi-names" method="POST" pathAndQuery="/register" pricing="contract" priceLabel={pick.price} popup={false}
               nameEntry={{ suffix: ".hoodfi.eth", initial: pick.label, locked: true, cta: `Register ${name} · ${pick.price}` }}
               onPaid={(body) => {
                 const n = (body as { name?: unknown })?.name;

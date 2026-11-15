@@ -8,6 +8,7 @@ import { decodeHeader, encodeHeader } from "@/lib/x402/encoding";
 import { transferWithAuthorizationTypes, usdgDomain } from "@/lib/x402/eip712";
 import type { PaymentPayload, PaymentRequired, SettleResponse } from "@/lib/x402/types";
 import { formatUsd } from "@/lib/x402/money";
+import { ResponseCard, type PaidResponse } from "@/components/ResponseCard";
 
 type Line = { t: string; tone?: "ok" | "bad" | "dim" };
 
@@ -15,12 +16,14 @@ type Line = { t: string; tone?: "ok" | "bad" | "dim" };
  * `nameEntry`: a contract endpoint that sells a name. The buyer types it, the URL becomes
  * `/g/<slug><path>/<name>`, and the exact price is shown before the wallet asks to sign.
  */
-export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEntry, onPaid }: {
+export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEntry, onPaid, popup = true }: {
   slug: string; method: string; pathAndQuery: string; pricing: "free" | "fixed" | "quote" | "contract"; priceLabel: string;
   /** `initial` pre-fills the name; `locked` hides the input (the caller already chose it). */
   nameEntry?: { suffix?: string; initial?: string; locked?: boolean; cta?: string };
   /** Called with the parsed JSON response after a successful paid call (e.g. a registered name). */
   onPaid?: (body: unknown) => void;
+  /** Open the response in a popup card on success (off for flows that move on by themselves). */
+  popup?: boolean;
 }) {
   const [name, setName] = useState(nameEntry?.initial ?? "");
   const { address, chainId, isConnected } = useAccount();
@@ -29,8 +32,15 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
   const { signTypedDataAsync } = useSignTypedData();
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState<Line[]>([]);
-  const [result, setResult] = useState<{ body: string; receipt?: SettleResponse; receiptPage?: string } | null>(null);
+  const [result, setResult] = useState<{ body: string; receipt?: SettleResponse; receiptPage?: string; card: PaidResponse } | null>(null);
+  const [cardOpen, setCardOpen] = useState(false);
   const push = (l: Line) => setLog((x) => [...x, l]);
+  const show = (card: PaidResponse, receipt?: SettleResponse) => {
+    const text = new TextDecoder().decode(card.bytes);
+    setResult({ body: pretty(text), receipt, receiptPage: card.receiptPage, card });
+    if (popup) setCardOpen(true);
+    return text;
+  };
 
   async function run() {
     if (nameEntry && !name.trim()) { setLog([{ t: "Type the name you want first.", tone: "bad" }]); return; }
@@ -41,7 +51,8 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
       try {
         const r = await fetch(url, init);
         push({ t: `${r.status} ${r.ok ? "OK · free, no payment" : ""}`, tone: r.ok ? "ok" : "bad" });
-        setResult({ body: pretty(await r.text()) });
+        const bytes = new Uint8Array(await r.arrayBuffer());
+        show({ bytes, contentType: r.headers.get("content-type") ?? "", status: r.status, paidLabel: r.ok ? "Free, no payment" : `Error ${r.status}`, request: `${method} ${url}` });
       } catch (e) {
         push({ t: (e as Error).message, tone: "bad" });
       } finally { setBusy(false); }
@@ -76,7 +87,8 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
       };
       push({ t: "Retrying with PAYMENT-SIGNATURE…", tone: "dim" });
       const paid = await fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), "PAYMENT-SIGNATURE": encodeHeader(payment) } });
-      const body = await paid.text();
+      const bytes = new Uint8Array(await paid.arrayBuffer());
+      const body = new TextDecoder().decode(bytes);
       if (!paid.ok) {
         let msg = body;
         try { const j = JSON.parse(body); msg = j.error ? `${j.error}${j.reason ? ` (${j.reason})` : ""}` : j.error ?? body; } catch {}
@@ -87,7 +99,16 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
       const rh = paid.headers.get("PAYMENT-RESPONSE");
       const receipt = rh ? decodeHeader<SettleResponse>(rh) : undefined;
       push({ t: `200 OK · paid ${price} USDG`, tone: "ok" });
-      setResult({ body: pretty(body), receipt, receiptPage: paid.headers.get("x-x402fi-receipt") ?? undefined });
+      show({
+        bytes,
+        contentType: paid.headers.get("content-type") ?? "",
+        status: paid.status,
+        paidLabel: `Paid ${price} USDG`,
+        request: `${method} ${url}`,
+        transaction: receipt?.transaction || undefined,
+        receiptPage: paid.headers.get("x-x402fi-receipt") ?? undefined,
+        receiptSha256: paid.headers.get("x-x402fi-response-sha256") ?? undefined,
+      }, receipt);
       if (onPaid) { try { onPaid(JSON.parse(body)); } catch { /* non-JSON response */ } }
     } catch (e) {
       push({ t: (e as Error).message.split("\n")[0], tone: "bad" });
@@ -117,14 +138,21 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
       )}
       {result && (
         <div className="mt-4 space-y-3">
-          <pre className="max-h-64 overflow-auto rounded-lg border border-line bg-bg p-3 font-mono text-[0.75rem]">{result.body}</pre>
+          {popup ? (
+            <button onClick={() => setCardOpen(true)} className="btn btn-ghost w-full text-sm">View response</button>
+          ) : (
+            <pre className="max-h-64 overflow-auto rounded-lg border border-line bg-bg p-3 font-mono text-[0.75rem]">{result.body}</pre>
+          )}
           {result.receipt?.transaction && (
             <div className="flex flex-wrap gap-3 text-sm">
               <a href={txUrl(result.receipt.transaction)} target="_blank" rel="noreferrer" className="underline">View transaction</a>
-              {result.receiptPage && <a href={result.receiptPage} className="underline">Receipt</a>}
+              {result.receiptPage && <a href={result.receiptPage} target="_blank" rel="noreferrer" className="underline">Receipt</a>}
             </div>
           )}
         </div>
+      )}
+      {popup && result && (
+        <ResponseCard open={cardOpen} onClose={() => setCardOpen(false)} response={result.card} fileBase={`${slug}-${result.receiptPage?.split("/").pop() ?? Date.now()}`} />
       )}
     </div>
   );
