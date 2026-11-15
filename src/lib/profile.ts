@@ -54,6 +54,19 @@ export function parseLogo(input: string | null | undefined, ipfsGateway = "https
   return u.toString();
 }
 
+/**
+ * Gateways tried in order for an ipfs:// logo. One public gateway is not enough:
+ * ipfs.io answered 429 for a HoodFi avatar on 2026-11-15, so the logo vanished.
+ * Our own gateway holds HoodFi pins but refuses CIDs it did not pin, hence a chain.
+ */
+export const IPFS_GATEWAYS = ["https://ipfs.onchain-id.id", "https://gateway.pinata.cloud", "https://ipfs.io", "https://dweb.link"];
+
+/** Every URL worth trying for a logo: an IPFS link expands to each gateway, anything else is itself. */
+export function logoCandidates(url: string): string[] {
+  const m = /^https:\/\/ipfs\.io\/ipfs\/(.+)$/.exec(url);
+  return m ? IPFS_GATEWAYS.map((g) => `${g}/ipfs/${m[1]}`) : [url];
+}
+
 /** Raster images only: an SVG served from our origin could run script. */
 export const LOGO_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 export const LOGO_MAX_BYTES = 1_000_000;

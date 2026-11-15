@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseXHandle, parseWebsite, parseLogo, mergeProfile } from "@/lib/profile";
+import { parseXHandle, parseWebsite, parseLogo, mergeProfile, logoCandidates, IPFS_GATEWAYS } from "@/lib/profile";
 
 describe("parseXHandle", () => {
   it("accepts handles and profile links", () => {
@@ -31,6 +31,10 @@ describe("parseLogo", () => {
   it("maps ipfs to a gateway and keeps https", () => {
     expect(parseLogo("ipfs://bafyabc/logo.png")).toBe("https://ipfs.io/ipfs/bafyabc/logo.png");
     expect(parseLogo("https://cdn.x/logo.png")).toBe("https://cdn.x/logo.png");
+    // An IPFS logo is tried on every gateway, our own first; any other link only as itself.
+    expect(logoCandidates(parseLogo("ipfs://bafyabc/logo.png")!)).toEqual(IPFS_GATEWAYS.map((g) => `${g}/ipfs/bafyabc/logo.png`));
+    expect(logoCandidates("https://cdn.x/logo.png")).toEqual(["https://cdn.x/logo.png"]);
+    expect(IPFS_GATEWAYS[0]).toBe("https://ipfs.onchain-id.id");
   });
   it("refuses other schemes", () => {
     for (const s of ["http://cdn.x/a.png", "data:image/png;base64,AAA", "javascript:1"]) expect(() => parseLogo(s), s).toThrow();
