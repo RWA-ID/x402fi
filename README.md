@@ -57,7 +57,7 @@ x402Fi packages that into a product businesses and institutions can use without 
 |---|---|
 | **No-code paywall** | A gateway at `/g/<listing>/<path>` answers 402 with a price, verifies the buyer's signed USDG authorization, forwards the call to the seller's API and settles **only after the API answers 2xx**. |
 | **Multi-endpoint listings** | One listing (project) holds many endpoints, each with its own method, path and pricing: free, fixed, seller-quoted or on-chain contract. |
-| **Marketplace** | Searchable listings with categories, price summaries, logos and a live **Try it** button that runs a real payment from the visitor's wallet. |
+| **Marketplace** | Searchable listings with categories, price summaries, logos and a live **Try it** button that runs a real payment from the visitor's wallet. Try it shows one field per query parameter of the seller's example, pre-filled with the example value (0x addresses and numbers are checked before signing; wallet parameters offer "Use my wallet"), an editable JSON body for POST endpoints, and a file picker (up to 1 MB) for POST endpoints whose seller ticked "Takes a file as the request body". |
 | **Verified Payee** | Sellers link an x402 Identity (ENS) name. x402Fi checks it with the open `payee-name` verifier and shows a badge only when the name's own records list the service and its payout wallet. |
 | **Verified profiles** | Logo, website and X handle are read from the payee name's ENS records (verified ✓). Seller-entered values fill gaps and are labelled "by seller". |
 | **On-chain products** | A `contract` pricing mode settles by calling a seller contract (e.g. register a name and deliver it) in **one atomic transaction**. |

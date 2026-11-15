@@ -9,6 +9,7 @@ import { transferWithAuthorizationTypes, usdgDomain } from "@/lib/x402/eip712";
 import type { PaymentPayload, PaymentRequired, SettleResponse } from "@/lib/x402/types";
 import { formatUsd } from "@/lib/x402/money";
 import { ResponseCard, type PaidResponse } from "@/components/ResponseCard";
+import { buildTryUrl, fileError, formatBytes, jsonBodyError, tryFields, validateField } from "@/lib/tryit-fields";
 
 type Line = { t: string; tone?: "ok" | "bad" | "dim" };
 
@@ -16,8 +17,14 @@ type Line = { t: string; tone?: "ok" | "bad" | "dim" };
  * `nameEntry`: a contract endpoint that sells a name. The buyer types it, the URL becomes
  * `/g/<slug><path>/<name>`, and the exact price is shown before the wallet asks to sign.
  */
-export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEntry, onPaid, popup = true }: {
+export function TryIt({ slug, method, pathAndQuery, params, exampleBody, acceptsFile, pricing, priceLabel, nameEntry, onPaid, popup = true }: {
   slug: string; method: string; pathAndQuery: string; pricing: "free" | "fixed" | "quote" | "contract"; priceLabel: string;
+  /** The example's query parameters: each becomes an editable field, pre-filled with the example value. */
+  params?: Record<string, string>;
+  /** POST only: the seller's example JSON body, editable before sending. */
+  exampleBody?: string | null;
+  /** POST only: the endpoint takes a raw file as its body; a file picker replaces the JSON box. */
+  acceptsFile?: boolean;
   /** `initial` pre-fills the name; `locked` hides the input (the caller already chose it). */
   nameEntry?: { suffix?: string; initial?: string; locked?: boolean; cta?: string };
   /** Called with the parsed JSON response after a successful paid call (e.g. a registered name). */
@@ -26,6 +33,18 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
   popup?: boolean;
 }) {
   const [name, setName] = useState(nameEntry?.initial ?? "");
+  const [fields] = useState(() => tryFields(params ?? {}));
+  const [values, setValues] = useState<Record<string, string>>(() => ({ ...(params ?? {}) }));
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const hasBody = method === "POST" && !nameEntry;
+  const fileMode = hasBody && !!acceptsFile;
+  const [jsonBody, setJsonBody] = useState(() => pretty(exampleBody?.trim() || "{}"));
+  const [file, setFile] = useState<File | null>(null);
+  const pickFile = (f: File | null) => {
+    setFile(f);
+    // A "name" parameter (IPFS Pinning's ?name=) starts as the file's own name.
+    if (f && fields.some((x) => x.key === "name")) setValues((v) => ({ ...v, name: f.name }));
+  };
   const { address, chainId, isConnected } = useAccount();
   const { open } = useAppKit();
   const { switchChainAsync } = useSwitchChain();
@@ -44,8 +63,24 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
 
   async function run() {
     if (nameEntry && !name.trim()) { setLog([{ t: "Type the name you want first.", tone: "bad" }]); return; }
-    const url = nameEntry ? `/g/${slug}${pathAndQuery}/${encodeURIComponent(name.trim().toLowerCase())}` : `/g/${slug}${pathAndQuery}`;
-    const init: RequestInit = method === "POST" ? { method, headers: { "content-type": "application/json" }, body: "{}" } : { method };
+    // Check the inputs before anything is fetched or signed.
+    const bad = fields.find((f) => validateField(f, values[f.key] ?? ""));
+    if (bad) {
+      setTouched(Object.fromEntries(fields.map((f) => [f.key, true])));
+      setLog([{ t: `${bad.label}: ${validateField(bad, values[bad.key] ?? "")}`, tone: "bad" }]);
+      return;
+    }
+    const bodyErr = fileMode ? fileError(file) : hasBody ? jsonBodyError(jsonBody) : null;
+    if (bodyErr) { setLog([{ t: bodyErr, tone: "bad" }]); return; }
+    const url = nameEntry
+      ? `/g/${slug}${pathAndQuery}/${encodeURIComponent(name.trim().toLowerCase())}`
+      : fields.length ? buildTryUrl(slug, pathAndQuery, fields, values) : `/g/${slug}${pathAndQuery}`;
+    // A file goes as is, with its own type; otherwise the visitor's JSON (the seller's example to start).
+    const init: RequestInit = method !== "POST"
+      ? { method }
+      : fileMode && file
+        ? { method, headers: { "content-type": file.type || "application/octet-stream" }, body: file }
+        : { method, headers: { "content-type": "application/json" }, body: nameEntry ? "{}" : jsonBody.trim() || "{}" };
     if (pricing === "free") {
       setBusy(true); setLog([{ t: `${method} ${url}` }]); setResult(null);
       try {
@@ -125,10 +160,68 @@ export function TryIt({ slug, method, pathAndQuery, pricing, priceLabel, nameEnt
           {nameEntry.suffix && <span className="shrink-0 font-mono text-sm text-ink-3">{nameEntry.suffix}</span>}
         </div>
       )}
+      {!nameEntry && fields.length > 0 && (
+        <div className="mb-3 space-y-3">
+          {fields.map((f) => {
+            const id = `try-${slug}-${pathAndQuery}-${f.key}`;
+            const err = touched[f.key] ? validateField(f, values[f.key] ?? "") : null;
+            const mine = f.kind === "wallet" && address && values[f.key]?.toLowerCase() === address.toLowerCase();
+            return (
+              <div key={f.key}>
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <label htmlFor={id} className="text-xs text-ink-2">
+                    {f.label} <span className="font-mono text-ink-3">{f.key}</span>
+                  </label>
+                  {f.kind === "wallet" && address && !mine && (
+                    <button type="button" onClick={() => { setValues((v) => ({ ...v, [f.key]: address })); setTouched((t) => ({ ...t, [f.key]: true })); }}
+                      className="rounded-full border border-line px-2.5 py-0.5 text-xs text-ink-2 hover:border-ink-3 hover:text-ink">
+                      Use my wallet
+                    </button>
+                  )}
+                  {f.kind === "wallet" && mine && <span className="text-xs text-ink-3">Your wallet</span>}
+                </div>
+                <input
+                  id={id}
+                  className="field"
+                  value={values[f.key] ?? ""}
+                  onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                  onBlur={() => setTouched((t) => ({ ...t, [f.key]: true }))}
+                  placeholder={f.example}
+                  inputMode={f.kind === "number" ? "decimal" : undefined}
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  aria-invalid={!!err}
+                  aria-describedby={err ? `${id}-err` : undefined}
+                />
+                {err && <p id={`${id}-err`} className="mt-1 text-xs text-bad">{err}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {fileMode && (
+        <div className="mb-3">
+          <span className="mb-1 block text-xs text-ink-2">File <span className="text-ink-3">· up to 1 MB</span></span>
+          <label className={`flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-dashed px-3.5 py-3 text-sm hover:border-ink-3 ${file && fileError(file) ? "border-bad" : "border-line"}`}>
+            <span className="min-w-0 truncate">{file ? <><span className="font-mono">{file.name}</span> <span className="text-ink-3">· {formatBytes(file.size)}</span></> : <span className="text-ink-3">Choose a file…</span>}</span>
+            <span className="shrink-0 rounded-full border border-line px-2.5 py-0.5 text-xs text-ink-2">{file ? "Change" : "Browse"}</span>
+            <input type="file" className="sr-only" onChange={(e) => pickFile(e.target.files?.[0] ?? null)} aria-label="File to send" />
+          </label>
+          {file && fileError(file) && <p className="mt-1 text-xs text-bad">{fileError(file)}</p>}
+        </div>
+      )}
+      {hasBody && !fileMode && (
+        <label className="mb-3 block">
+          <span className="mb-1 block text-xs text-ink-2">JSON body</span>
+          <textarea className="field min-h-24 text-sm" value={jsonBody} onChange={(e) => setJsonBody(e.target.value)} spellCheck={false} autoCapitalize="none" aria-invalid={!!jsonBodyError(jsonBody)} />
+          {jsonBodyError(jsonBody) && <p className="mt-1 text-xs text-bad">{jsonBodyError(jsonBody)}</p>}
+        </label>
+      )}
       <button onClick={run} disabled={busy} className={`btn w-full ${pricing === "free" ? "btn-ghost" : "btn-primary"}`}>
         {busy ? "Working…" : pricing === "free" ? "Try the example · free" : !isConnected ? (nameEntry?.cta ? "Connect wallet to register" : "Connect a wallet to try it") : nameEntry ? nameEntry.cta ?? "Check price, then register" : `Try it · ${pricing === "quote" ? "see price, then pay" : `pay ${priceLabel}`}`}
       </button>
-      {pricing === "free" && !nameEntry && <p className="mt-2 text-center text-xs text-ink-3">Runs the seller&apos;s example request shown above.</p>}
+      {pricing === "free" && !nameEntry && <p className="mt-2 text-center text-xs text-ink-3">{fields.length ? "Runs with the values above. They start as the seller's example." : "Runs the seller's example request shown above."}</p>}
       {pricing !== "free" && <p className="mt-2 text-center text-xs text-ink-3">Needs USDG on Robinhood Chain. No gas: x402Fi pays it.</p>}
       {log.length > 0 && (
         <ol className="mt-4 space-y-1 rounded-lg bg-forest p-3 font-mono text-[0.75rem] text-forest-ink">

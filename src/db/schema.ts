@@ -89,6 +89,8 @@ export const services = sqliteTable(
      * (x402Fi only lists it). JSON body x402Fi sends when probing a POST endpoint's 402.
      */
     exampleBody: text("example_body"),
+    /** A POST endpoint that takes a raw file as its body (any content type): Try it shows a file picker. */
+    acceptsFile: integer("accepts_file", { mode: "boolean" }).notNull().default(false),
     exampleRequest: text("example_request"),
     exampleResponse: text("example_response"),
     sortOrder: integer("sort_order").notNull().default(0),

@@ -13,6 +13,7 @@ export interface ServiceInput {
   path?: string;
   pricing?: "free" | "fixed" | "quote" | "native";
   exampleBody?: string | null;
+  acceptsFile?: boolean;
   price?: string | null;
   quotePath?: string | null;
   maxPrice?: string | null;
@@ -93,6 +94,7 @@ export function validateService(i: ServiceInput, current?: Patch): { ok: true; v
     if (b) { try { JSON.parse(b); } catch { e.exampleBody = "Must be valid JSON."; } }
     out.exampleBody = b ? b.slice(0, 4000) : null;
   }
+  if (i.acceptsFile !== undefined) out.acceptsFile = i.acceptsFile === true;
   if (i.sortOrder !== undefined) out.sortOrder = Math.max(0, Math.min(999, Math.floor(Number(i.sortOrder) || 0)));
   if (i.status !== undefined) {
     if (!["live", "paused"].includes(i.status)) e.status = "live or paused.";
@@ -102,6 +104,11 @@ export function validateService(i: ServiceInput, current?: Patch): { ok: true; v
   // Cross-field rules on the merged result.
   Object.assign(merged, out);
   if (!merged.name) e.name ??= "Name the endpoint.";
+  // Only a POST carries a body, so only a POST can take a file. Switching to GET clears it.
+  if (merged.acceptsFile && merged.method !== "POST") {
+    if (i.acceptsFile === true) e.acceptsFile ??= "Only a POST endpoint can take a file.";
+    else out.acceptsFile = false;
+  }
   if (merged.pricing === "fixed" && !merged.priceAtomic) e.price ??= "Set a price per call.";
   if (merged.pricing === "quote") {
     if (!merged.maxPriceAtomic) e.maxPrice ??= "Set the most a single call can cost. Buyers see this ceiling.";

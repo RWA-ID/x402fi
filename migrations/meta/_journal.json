@@ -57,6 +57,13 @@
       "when": 1794730368971,
       "tag": "0007_facilitator_settles",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794782814867,
+      "tag": "0008_service_accepts_file",
+      "breakpoints": true
     }
   ]
 }

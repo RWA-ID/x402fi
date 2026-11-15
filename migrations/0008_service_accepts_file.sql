@@ -1,0 +1,1 @@
+ALTER TABLE `services` ADD `accepts_file` integer DEFAULT false NOT NULL;

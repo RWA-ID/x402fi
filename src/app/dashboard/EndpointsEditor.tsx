@@ -5,19 +5,20 @@ import { atomicToUsd, formatUsd } from "@/lib/x402/money";
 interface Svc {
   id: string; name: string; summary: string; method: string; path: string;
   pricing: "free" | "fixed" | "quote" | "contract" | "native"; priceAtomic: string | null; quotePath: string | null; maxPriceAtomic: string | null;
-  exampleRequest: string | null; exampleBody: string | null; exampleResponse: string | null; status: "live" | "paused";
+  exampleRequest: string | null; exampleBody: string | null; acceptsFile: boolean; exampleResponse: string | null; status: "live" | "paused";
 }
 interface Form {
   name: string; summary: string; method: "GET" | "POST"; path: string;
-  pricing: "free" | "fixed" | "quote" | "native"; price: string; quotePath: string; maxPrice: string; exampleRequest: string; exampleBody: string; exampleResponse: string;
+  pricing: "free" | "fixed" | "quote" | "native"; price: string; quotePath: string; maxPrice: string; exampleRequest: string; exampleBody: string; acceptsFile: boolean; exampleResponse: string;
 }
-const EMPTY: Form = { name: "", summary: "", method: "GET", path: "/", pricing: "fixed", price: "0.01", quotePath: "", maxPrice: "", exampleRequest: "", exampleBody: "", exampleResponse: "" };
+const EMPTY: Form = { name: "", summary: "", method: "GET", path: "/", pricing: "fixed", price: "0.01", quotePath: "", maxPrice: "", exampleRequest: "", exampleBody: "", acceptsFile: false, exampleResponse: "" };
 
 const toForm = (s: Svc): Form => ({
   name: s.name, summary: s.summary, method: s.method as Form["method"], path: s.path, pricing: s.pricing === "contract" ? "quote" : s.pricing,
   price: s.priceAtomic ? atomicToUsd(s.priceAtomic) : "", quotePath: s.quotePath ?? "", maxPrice: s.maxPriceAtomic ? atomicToUsd(s.maxPriceAtomic) : "",
   exampleRequest: s.exampleRequest ?? "",
   exampleBody: s.exampleBody ?? "",
+  acceptsFile: !!s.acceptsFile,
   exampleResponse: s.exampleResponse ?? "",
 });
 
@@ -41,6 +42,7 @@ export function EndpointsEditor({ listingId, slug, onChange }: { listingId: stri
       price: form.pricing === "fixed" ? form.price : null,
       maxPrice: form.pricing === "quote" ? form.maxPrice : null,
       quotePath: form.pricing === "quote" ? form.quotePath : null,
+      acceptsFile: form.method === "POST" && form.pricing !== "native" && form.acceptsFile,
     };
     const r = await fetch(editing === "new" ? `/api/listings/${listingId}/services` : `/api/services/${editing}`, {
       method: editing === "new" ? "POST" : "PATCH",
@@ -127,6 +129,15 @@ export function EndpointsEditor({ listingId, slug, onChange }: { listingId: stri
           <Input label="Example (optional)" value={form.exampleRequest} onChange={(v) => set("exampleRequest", v)} placeholder="/alice or ?q=1" />
           {form.method === "POST" && (
             <Input label="Example JSON body" value={form.exampleBody} onChange={(v) => set("exampleBody", v)} error={errors.exampleBody} placeholder='{"minutes": 2, "task": "..."}' />
+          )}
+          {form.method === "POST" && form.pricing !== "native" && (
+            <label className="flex items-start gap-2.5 text-sm">
+              <input type="checkbox" className="mt-0.5" checked={form.acceptsFile} onChange={(e) => set("acceptsFile", e.target.checked)} />
+              <span>
+                Takes a file as the request body
+                <span className="block text-xs text-ink-3">{errors.acceptsFile ?? "Try it shows a file picker (up to 1 MB) and sends the file as is, with its own content type."}</span>
+              </span>
+            </label>
           )}
           {form.pricing !== "native" && (
             <label className="block">

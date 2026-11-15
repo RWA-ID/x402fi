@@ -54,6 +54,12 @@ function examplePath(s: PublicService) {
   return base + subPath + (q ? `?${q}` : "");
 }
 
+/** The example split for Try it: the path, and the query parameters the visitor can edit. */
+function tryPath(s: PublicService) {
+  const { subPath, query } = parseExample(s.path, s.exampleRequest);
+  return { path: (s.path === "/" ? "" : s.path) + subPath, query };
+}
+
 export default async function ListingPage({ params }: P) {
   const { slug } = await params;
   const l = await listingBySlug(slug);
@@ -140,7 +146,10 @@ export default async function ListingPage({ params }: P) {
                       <TryIt
                         slug={l.slug}
                         method={s.method}
-                        pathAndQuery={s.pricing === "contract" ? (s.path === "/" ? "" : s.path) : ex}
+                        pathAndQuery={s.pricing === "contract" ? (s.path === "/" ? "" : s.path) : tryPath(s).path}
+                        params={s.pricing === "contract" ? undefined : tryPath(s).query}
+                        exampleBody={s.exampleBody}
+                        acceptsFile={s.acceptsFile}
                         pricing={s.pricing}
                         priceLabel={priceLabel(s, formatUsd)}
                         nameEntry={s.pricing === "contract" ? { suffix: parseContractConfig(s.contractConfig)?.labelSuffix } : undefined}

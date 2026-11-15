@@ -42,3 +42,20 @@ describe("validateService: free and example requests", () => {
     }
   });
 });
+
+describe("validateService: accepts a file", () => {
+  it("stores the flag on a POST endpoint", () => {
+    const v = validateService({ ...base, acceptsFile: true });
+    expect(v.ok && v.value.acceptsFile).toBe(true);
+  });
+
+  it("refuses the flag on a GET endpoint", () => {
+    const v = validateService({ ...base, method: "GET", acceptsFile: true });
+    expect(!v.ok && v.errors.acceptsFile).toMatch(/Only a POST/);
+  });
+
+  it("clears the flag when an edit switches the endpoint to GET", () => {
+    const v = validateService({ method: "GET" }, { name: "Pin", method: "POST", pricing: "fixed", priceAtomic: "10000", acceptsFile: true });
+    expect(v.ok && v.value.acceptsFile).toBe(false);
+  });
+});
