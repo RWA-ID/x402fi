@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, primaryKey } from "drizzle-orm/sqlite-core";
 
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -124,6 +124,21 @@ export const payments = sqliteTable(
     createdAt: integer("created_at").notNull().$defaultFn(now),
   },
   (t) => [index("payments_listing_idx").on(t.listingId, t.createdAt), index("payments_payto_idx").on(t.payTo, t.createdAt)],
+);
+
+/**
+ * How many settlements the public facilitator has paid gas for, per payee and UTC day.
+ * x402Fi pays that gas, so each payee has a daily budget (see lib/x402/settleBudget).
+ */
+export const facilitatorSettles = sqliteTable(
+  "facilitator_settles",
+  {
+    payTo: text("pay_to").notNull(), // lower-cased
+    /** Start of the UTC day, unix seconds. */
+    day: integer("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.payTo, t.day] })],
 );
 
 export type Listing = typeof listings.$inferSelect;

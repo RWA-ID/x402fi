@@ -50,6 +50,13 @@
       "when": 1794258858997,
       "tag": "0006_payment_delivery_scan",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794730368971,
+      "tag": "0007_facilitator_settles",
+      "breakpoints": true
     }
   ]
 }

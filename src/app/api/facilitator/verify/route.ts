@@ -2,7 +2,7 @@ import { getAddress } from "viem";
 import { facilitatorPolicyReason, verifyPayment } from "@/lib/x402/facilitator";
 import { robinhoodClient } from "@/lib/server/clients";
 import { envAsync } from "@/lib/server/env";
-import { isListedPayee } from "@/lib/server/facilitatorPolicy";
+import { isListedPayee, payeeAtDailyCap } from "@/lib/server/facilitatorPolicy";
 import type { PaymentPayload, PaymentRequirements } from "@/lib/x402/types";
 
 /**
@@ -23,8 +23,8 @@ export async function POST(req: Request) {
   const r = await verifyPayment(robinhoodClient(e), body.paymentPayload, body.paymentRequirements);
   if (!r.isValid) return Response.json(r, { status: "retryable" in r && r.retryable ? 503 : 200 });
   // `to` equals the required payTo once verified.
-  if (!(await isListedPayee(e, getAddress(body.paymentPayload.payload.authorization.to)))) {
-    return Response.json({ isValid: false, invalidReason: "pay_to_not_listed", payer: r.payer });
-  }
+  const payTo = getAddress(body.paymentPayload.payload.authorization.to);
+  if (!(await isListedPayee(e, payTo))) return Response.json({ isValid: false, invalidReason: "pay_to_not_listed", payer: r.payer });
+  if (await payeeAtDailyCap(e, payTo)) return Response.json({ isValid: false, invalidReason: "payee_daily_settle_limit", payer: r.payer });
   return Response.json(r);
 }

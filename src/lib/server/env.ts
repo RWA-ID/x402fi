@@ -18,6 +18,8 @@ export interface AppEnv {
   LISTING_TEXT_SCAN?: string;
   /** Var: paid-response check mode, "off" (default) | "flag" | "block". See lib/delivery. */
   DELIVERY_SCAN?: string;
+  /** Var: settlements the public facilitator pays for per payee and UTC day. Default 200. See lib/x402/settleBudget. */
+  FACILITATOR_DAILY_SETTLES?: string;
 }
 
 /** Read bindings via OpenNext. Never `process.env` on Workers for bindings. */

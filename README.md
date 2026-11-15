@@ -246,7 +246,7 @@ curl -X POST "https://x402fi.dev/g/ipfs-pinning/pin?name=hello.json" -H "content
 - **Replay protection.** The authorization nonce is claimed in D1 under a unique index **before** the upstream is called, and USDG's `authorizationState` rejects reuse on-chain.
 - **Funds are reserved while a call is in flight.** The same statement that claims the nonce (`src/lib/gateway/reserve.ts`) inserts the row only if the payer's other pending payments plus this one fit in the balance the check read, so one balance cannot back several concurrent calls. A pending row stops counting after 3 minutes.
 - **One path, one endpoint.** A request whose decoded path has a dot segment or an encoded slash is answered `400` before an endpoint is matched, so it cannot be priced as one endpoint and forwarded to another. Caller-sent `x-x402fi-*` headers are never forwarded.
-- **The facilitator does not spend gas on transfers that pay nobody.** `/verify` and `/settle` refuse a zero or sub-minimum amount (`amount_below_minimum`), a transfer to the payer itself (`self_transfer`) and a `payTo` that is not the payout wallet of a live or paused listing (`pay_to_not_listed`).
+- **The facilitator does not spend gas on transfers that pay nobody.** `/verify` and `/settle` refuse a zero or sub-minimum amount (`amount_below_minimum`), a transfer to the payer itself (`self_transfer`) and a `payTo` that is not the payout wallet of a live or paused listing (`pay_to_not_listed`). Each payee gets 200 facilitator settlements per UTC day (`payee_daily_settle_limit`, HTTP 429; the `FACILITATOR_DAILY_SETTLES` var changes it), taken in one statement so a burst cannot pass it; the gateway's own settlements are not counted.
 - **Upstream secret.** Every forwarded paid call carries `X-X402Fi-Secret` (per listing, rotatable) so sellers can reject calls that bypass the paywall, plus `X-X402Fi-Payer`.
 - **SSRF guard** (`src/lib/ssrf.ts`). https only, port 443, no credentials, no `localhost`/`.internal`/etc. Private, link-local, CGNAT, documentation and multicast ranges are blocked in **every notation**, including IPv4-mapped (`::ffff:127.0.0.1`), IPv4-compatible and NAT64 IPv6. **Every A/AAAA answer** is resolved over DoH before fetching, redirects are not followed, and requests time out. Workers also run with `global_fetch_strictly_public`.
 - **Native probes** are unpaid, SSRF-guarded, time-limited, available only to signed-in sellers, and never send a payment header.
@@ -268,7 +268,7 @@ curl -X POST "https://x402fi.dev/g/ipfs-pinning/pin?name=hello.json" -H "content
 | Endpoint | Body | Returns |
 |---|---|---|
 | `POST /api/facilitator/verify` | `{ paymentPayload, paymentRequirements }` | `{ isValid, payer }` or `{ isValid:false, invalidReason }` |
-| `POST /api/facilitator/settle` | same | `{ success, transaction, network, payer }` or `{ success:false, errorReason }`. `payTo` must be a listing's payout wallet. |
+| `POST /api/facilitator/settle` | same | `{ success, transaction, network, payer }` or `{ success:false, errorReason }`. `payTo` must be a listing's payout wallet; 200 settlements per payee per UTC day, then `429`. |
 | `GET /api/facilitator/supported` | — | `{ kinds:[{x402Version:2, scheme:"exact", network:"eip155:4663"}], extensions:["payee-name"] }` |
 
 ### Discovery
@@ -296,6 +296,7 @@ D1 (SQLite) via Drizzle, schema in `src/db/schema.ts`, migrations in `migrations
 | `sellers` | Wallets that signed in (checksummed address). |
 | `listings` | A project: name, summary, description, category, upstream base URL, payout wallet, payee name, upstream secret, daily cap, profile (logo, website, X), status. |
 | `services` | Endpoints of a listing: method, path, pricing (`free`/`fixed`/`quote`/`contract`/`native`), price, quote path, ceiling, contract config, examples (incl. the JSON body used to probe a native POST endpoint), order, status. |
+| `facilitator_settles` | Settlements the public facilitator paid gas for, per payee and UTC day (the daily budget). |
 | `payments` | The ledger: listing, endpoint, payer, payee, amount, unique nonce, status (`pending`/`settled`/`settle_failed`/`upstream_failed`), tx hash, error, path, upstream status, latency. |
 
 KV stores SIWE nonces (10 min), payee verdicts, ENS profiles, native-endpoint probes and Priors records (10 min each; failures 60 s).
