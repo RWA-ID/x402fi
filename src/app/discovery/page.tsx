@@ -3,6 +3,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { discoveryFeed, MAX_LIMIT } from "@/lib/server/discovery";
 import { formatUsd } from "@/lib/x402/money";
+import { acceptAmount } from "@/lib/x402/native";
 import { Copy } from "@/components/Copy";
 
 export const dynamic = "force-dynamic";
@@ -52,8 +53,8 @@ export default async function Discovery() {
                     <div className="mt-0.5 text-xs text-ink-3">{i.metadata.category}</div>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs"><span className="mr-1.5 rounded bg-card px-1.5 py-0.5">{i.metadata.method}</span>{path}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{ceiling ? `Up to ${formatUsd(a.amount)}` : formatUsd(a.amount)}</td>
-                  <td className="px-4 py-3 font-mono text-xs">{a.payTo.slice(0, 6)}…{a.payTo.slice(-4)}{i.metadata.pricing === "contract" ? <span className="block font-sans text-ink-3">contract</span> : i.metadata.pricing === "native" ? <span className="block font-sans text-ink-3">paid directly</span> : null}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{ceiling ? `Up to ${formatUsd(acceptAmount(a))}` : formatUsd(acceptAmount(a))}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{a.payTo.slice(0, 6)}…{a.payTo.slice(-4)}{i.metadata.pricing === "contract" ? <span className="block font-sans text-ink-3">contract</span> : i.metadata.pricing === "native" ? <span className="block font-sans text-ink-3">paid directly{i.x402Version === 1 ? " · x402 v1" : ""}</span> : null}</td>
                   <td className="px-4 py-3 font-mono text-xs">{i.metadata.payeeName ?? "—"}</td>
                 </tr>
               );

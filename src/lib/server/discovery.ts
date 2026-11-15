@@ -4,6 +4,7 @@ import { getAddress, isAddress, isAddressEqual } from "viem";
 import { listings, services } from "@/db/schema";
 import { db, envAsync } from "@/lib/server/env";
 import { buildRequirements } from "@/lib/x402/requirements";
+import { isRobinhoodNetwork, nativeAccept, paymentHeader } from "@/lib/x402/native";
 import { parseContractConfig } from "@/lib/x402/contract";
 import { bazaarExtension } from "@/lib/x402/bazaar";
 import { nativeUrl, probeNative } from "./native";
@@ -77,8 +78,10 @@ export async function discoveryFeed(origin: string, q: DiscoveryQuery = {}) {
         return [{
           resource: url,
           ...common,
+          // The seller's own x402 version: a v1 endpoint is listed as v1, with a v1 payment option.
+          x402Version: p.quote.x402Version,
           description,
-          accepts: [buildRequirements({ url, description: s.summary || l.summary, amountAtomic: BigInt(p.quote.amount), payTo: p.quote.payTo })],
+          accepts: [nativeAccept(p.quote, url, s.summary || l.summary)],
           extensions: {
             // The seller's own declaration wins: it knows its API better than x402Fi does.
             bazaar: p.quote.bazaar ?? bazaarExtension(s, new URL(url).pathname),
@@ -91,6 +94,7 @@ export async function discoveryFeed(origin: string, q: DiscoveryQuery = {}) {
             method: s.method,
             pricing: "native",
             settlement: "direct",
+            paymentHeader: paymentHeader(p.quote.x402Version),
             payeeName,
             listing: `${origin}/market/${l.slug}`,
           },
@@ -132,7 +136,8 @@ export async function discoveryFeed(origin: string, q: DiscoveryQuery = {}) {
     const a = i.accepts[0];
     if (q.type && i.type !== q.type) return false;
     if (q.scheme && a.scheme !== q.scheme) return false;
-    if (q.network && a.network !== q.network) return false;
+    // A v1 endpoint names Robinhood Chain "robinhood": the CAIP-2 filter still finds it.
+    if (q.network && a.network !== q.network && !(isRobinhoodNetwork(a.network) && isRobinhoodNetwork(q.network))) return false;
     if (q.payTo && !(isAddress(q.payTo) && isAddressEqual(q.payTo, a.payTo))) return false;
     if (q.extensions && !(q.extensions in i.extensions)) return false;
     return true;

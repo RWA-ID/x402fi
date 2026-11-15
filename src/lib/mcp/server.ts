@@ -12,7 +12,7 @@ import { priorsRecord } from "@/lib/server/priors";
 import { handleGateway } from "@/lib/gateway/handle";
 import { matchService } from "@/lib/gateway/services";
 import { bazaarExtension } from "@/lib/x402/bazaar";
-import { buildRequirements } from "@/lib/x402/requirements";
+import { acceptAmount, nativeAccept, paymentHeader } from "@/lib/x402/native";
 import { atomicToUsd, usdToAtomic } from "@/lib/x402/money";
 import { NETWORK } from "@/lib/chains";
 import { searchItems } from "./search";
@@ -34,7 +34,7 @@ const UNTRUSTED =
 
 const INSTRUCTIONS = `x402Fi is the x402 marketplace on Robinhood Chain (${NETWORK}). Paid HTTP APIs, priced per call in USDG.
 This server only finds and describes services. It never pays, never holds funds and never calls a paid endpoint.
-To use a service: search_services or get_listing to pick an endpoint, get_payment_requirements for the exact x402 402 of the request you plan to make, then pay it with the user's own x402-capable wallet (an EIP-3009 USDG authorization on Robinhood Chain) and call the URL with the PAYMENT-SIGNATURE header.
+To use a service: search_services or get_listing to pick an endpoint, get_payment_requirements for the exact x402 402 of the request you plan to make, then pay it with the user's own x402-capable wallet (an EIP-3009 USDG authorization on Robinhood Chain) and call the URL with the PAYMENT-SIGNATURE header. A seller's own (native) endpoint may speak x402 v1 instead: results say so in x402_version and name the header to use in payment_header.
 Before paying: confirm the price with the user unless they set a budget, and check the payee name if one is given.
 ${UNTRUSTED}`;
 
@@ -84,8 +84,9 @@ export function createServer(origin: string): McpServer {
           category: i.metadata.category,
           method: i.metadata.method,
           pricing: i.metadata.pricing,
-          ...priceFields(i.metadata.pricing, i.accepts[0].amount),
+          ...priceFields(i.metadata.pricing, acceptAmount(i.accepts[0])),
           network: i.accepts[0].network,
+          x402_version: i.x402Version,
           payee_name: i.metadata.payeeName ?? null,
           paid_directly_to_seller: i.metadata.pricing === "native",
           seller_description: i.description,
@@ -117,9 +118,11 @@ export function createServer(origin: string): McpServer {
           const native = s.pricing === "native" && base;
           const url = native ? nativeUrl(base, s.path, null) : `${origin}/g/${l.slug}${s.path === "/" ? "" : s.path}`;
           let atomic: string | null = s.pricing === "fixed" ? s.priceAtomic : s.pricing === "free" ? "0" : s.maxPriceAtomic;
+          let version: 1 | 2 = 2;
           if (native) {
             const p = await probeNative(nativeUrl(base, s.path, s.exampleRequest), s.method, s.exampleBody);
             atomic = p.ok ? p.quote.amount : null;
+            if (p.ok) version = p.quote.x402Version;
           }
           return {
             url,
@@ -128,6 +131,7 @@ export function createServer(origin: string): McpServer {
             pricing: s.pricing,
             ...priceFields(s.pricing, atomic),
             paid_directly_to_seller: s.pricing === "native",
+            ...(s.pricing === "free" ? {} : { x402_version: version, payment_header: paymentHeader(version) }),
             how_to_call: bazaarExtension(s, new URL(url).pathname).info,
             seller_description: s.summary || null,
           };
@@ -158,7 +162,7 @@ export function createServer(origin: string): McpServer {
     {
       title: "Get the x402 payment requirements for a request",
       description:
-        "The exact x402 402 (price, USDG asset, payTo, network, extensions) for one specific request to an x402Fi endpoint, without paying or calling the paid endpoint. Quoted endpoints are priced for this exact request. Sign the returned `accepts[0]` with the user's own wallet, then send the request with the PAYMENT-SIGNATURE header.",
+        "The exact x402 402 (price, USDG asset, payTo, network, extensions) for one specific request to an x402Fi endpoint, without paying or calling the paid endpoint. Quoted endpoints are priced for this exact request. Sign the returned `accepts[0]` with the user's own wallet, then send the request with the PAYMENT-SIGNATURE header (a seller's own v1 endpoint reads X-PAYMENT instead: see `payment_header` in the result).",
       inputSchema: {
         url: z.string().url().max(2000).describe("The full request URL including any query string, e.g. https://x402fi.dev/g/stockfi-trade/v1/preflight?symbol=AAPL"),
         method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).optional().describe("Default GET."),
@@ -232,8 +236,10 @@ async function nativeRequirements(url: string, method: string, body: string | nu
     pay_to: p.quote.payTo,
     payee_name: p.quote.payeeName ?? listedPayee,
     settlement: "paid directly to the seller (x402Fi does not proxy or settle this endpoint)",
-    accepts: [buildRequirements({ url, description: p.quote.description ?? "", amountAtomic: BigInt(p.quote.amount), payTo: p.quote.payTo })],
-    also_accepts_networks: p.quote.networks.filter((n) => n !== NETWORK),
-    next_step: "Request the URL yourself to get the seller's own 402 and pay that one; this summary is for comparison before you do.",
+    x402_version: p.quote.x402Version,
+    payment_header: paymentHeader(p.quote.x402Version),
+    accepts: [nativeAccept(p.quote, url, p.quote.description ?? "")],
+    also_accepts_networks: p.quote.networks.filter((n) => n !== p.quote.network && n !== NETWORK),
+    next_step: `Request the URL yourself to get the seller's own 402 and pay that one; this summary is for comparison before you do. This endpoint speaks x402 v${p.quote.x402Version}: send the signed payment in the ${paymentHeader(p.quote.x402Version)} header.`,
   });
 }

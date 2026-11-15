@@ -8,7 +8,8 @@ export interface SearchableItem {
   description?: string;
   serviceName?: string;
   tags?: string[];
-  accepts: Array<{ amount: string }>;
+  /** v2 options carry `amount`, v1 options `maxAmountRequired`. */
+  accepts: Array<{ amount?: string; maxAmountRequired?: string }>;
   metadata: { name: string; category: string; payeeName?: string | null };
 }
 
@@ -31,7 +32,8 @@ export function searchItems<T extends SearchableItem>(items: T[], q: SearchInput
   const cat = q.category?.trim().toLowerCase();
   const scored: Array<{ item: T; score: number; price: bigint }> = [];
   for (const item of items) {
-    const price = BigInt(item.accepts[0]?.amount ?? "0");
+    const a = item.accepts[0];
+    const price = BigInt(a?.amount ?? a?.maxAmountRequired ?? "0");
     if (q.maxPriceAtomic !== undefined && price > q.maxPriceAtomic) continue;
     if (cat && item.metadata.category.toLowerCase() !== cat) continue;
     const name = `${item.metadata.name} ${item.serviceName ?? ""}`.toLowerCase();

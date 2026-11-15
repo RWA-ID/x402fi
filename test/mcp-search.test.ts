@@ -42,9 +42,17 @@ describe("searchItems", () => {
   it("lists everything cheapest first with no query, and respects the limit", () => {
     const all = searchItems(items, { limit: 10 });
     expect(all).toHaveLength(4);
-    expect(BigInt(all[0].accepts[0].amount)).toBe(10000n);
+    expect(BigInt(all[0].accepts[0].amount ?? "0")).toBe(10000n);
     expect(all.at(-1)!.metadata.name).toBe("Reopen Risk weekend report");
     expect(searchItems(items, { limit: 2 })).toHaveLength(2);
+  });
+
+  it("prices an x402 v1 item by maxAmountRequired", () => {
+    const v1 = { ...items[0], resource: "https://seller.example/v1", accepts: [{ maxAmountRequired: "5000" }] };
+    const all = searchItems([...items, v1], { limit: 10 });
+    expect(all[0].resource).toBe("https://seller.example/v1");
+    expect(searchItems([v1], { maxPriceAtomic: 4999n, limit: 10 })).toHaveLength(0);
+    expect(searchItems([v1], { maxPriceAtomic: 5000n, limit: 10 })).toHaveLength(1);
   });
 
   it("ignores punctuation and single letters in the query", () => {

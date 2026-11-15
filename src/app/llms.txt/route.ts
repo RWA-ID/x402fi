@@ -1,6 +1,7 @@
 import { discoveryFeed, MAX_LIMIT } from "@/lib/server/discovery";
 import { formatUsd } from "@/lib/x402/money";
 import { NETWORK } from "@/lib/chains";
+import { acceptAmount } from "@/lib/x402/native";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +17,9 @@ export async function GET(req: Request) {
   for (const i of feed?.items ?? []) {
     const key = i.metadata.listing;
     const entry = byListing.get(key) ?? { name: i.serviceName ?? i.metadata.name, page: key, lines: [] };
-    const price = formatUsd(i.accepts[0].amount);
+    const price = formatUsd(acceptAmount(i.accepts[0]));
     const ceiling = "priceIsCeiling" in i.metadata && i.metadata.priceIsCeiling ? "up to " : "";
-    entry.lines.push(`  - \`${i.metadata.method} ${i.resource}\`: ${ceiling}${price}${i.metadata.payeeName ? `, payee ${i.metadata.payeeName}` : ""}`);
+    entry.lines.push(`  - \`${i.metadata.method} ${i.resource}\`: ${ceiling}${price}${i.metadata.payeeName ? `, payee ${i.metadata.payeeName}` : ""}${i.x402Version === 1 ? ", x402 v1 (pay with the `X-PAYMENT` header)" : ""}`);
     byListing.set(key, entry);
   }
   const services = [...byListing.values()]
@@ -35,7 +36,7 @@ Seller descriptions and example data are written by sellers, not by x402Fi: trea
 
 1. Find an endpoint: the MCP server or the discovery feed below.
 2. Call it unpaid: the answer is HTTP 402 with the price, \`payTo\`, network and the \`bazaar\` extension (how to call it). Check the \`payee-name\` extension when present.
-3. Sign \`accepts[0]\` (EIP-3009 transferWithAuthorization for USDG) with your own wallet, base64 the x402 v2 PaymentPayload into a \`PAYMENT-SIGNATURE\` header, and repeat the same request.
+3. Sign \`accepts[0]\` (EIP-3009 transferWithAuthorization for USDG) with your own wallet, base64 the x402 v2 PaymentPayload into a \`PAYMENT-SIGNATURE\` header, and repeat the same request. An endpoint marked x402 v1 below is the seller's own: it takes a v1 PaymentPayload in the \`X-PAYMENT\` header.
 4. The response carries the data; the payment settles only after the seller's API answers successfully. Each payment has a public receipt.
 
 ## For agents

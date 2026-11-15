@@ -10,6 +10,7 @@ import { PriorsBadge } from "@/components/PriorsBadge";
 import { payeeStatus } from "@/lib/server/payee";
 import { listingPayeeVerified } from "@/lib/server/payeeBadges";
 import { formatUsd } from "@/lib/x402/money";
+import { isRobinhoodNetwork, paymentHeader } from "@/lib/x402/native";
 import { priceLabel } from "@/lib/gateway/services";
 import { addressUrl } from "@/lib/chains";
 import { PayeeBadge } from "@/components/PayeeBadge";
@@ -219,6 +220,7 @@ function NativeEndpoint({ s, url, probe }: { s: PublicService; url: string; prob
   const curl = s.method === "GET"
     ? `curl -i "${url}"`
     : `curl -i -X ${s.method} "${url}" \\\n  -H 'content-type: application/json' \\\n  -d '${(s.exampleBody ?? "{}").replace(/'/g, "'\\''")}'`;
+  const v1 = probe.ok && probe.quote.x402Version === 1;
   return (
     <section className="card overflow-hidden">
       <div className="grid grid-cols-[1fr_auto] items-start gap-4 p-5">
@@ -234,12 +236,12 @@ function NativeEndpoint({ s, url, probe }: { s: PublicService; url: string; prob
       </div>
       <pre className="whitespace-pre-wrap break-all bg-forest px-5 py-4 font-mono text-[0.78rem] leading-relaxed text-forest-ink">{curl}{`
 
-# The seller answers 402 itself: sign USDG and retry with PAYMENT-SIGNATURE`}</pre>
+# The seller answers 402 itself${v1 ? " (x402 v1)" : ""}: sign USDG and retry with ${paymentHeader(probe.ok ? probe.quote.x402Version : 2)}`}</pre>
       <div className="border-t border-line px-5 py-3 text-xs text-ink-3">
         {probe.ok ? (
-          <>Read live from the seller&apos;s 402: {formatUsd(probe.quote.amount)} USDG on Robinhood Chain to <span className="font-mono">{probe.quote.payTo.slice(0, 6)}…{probe.quote.payTo.slice(-4)}</span>
+          <>Read live from the seller&apos;s {v1 ? "x402 v1 " : ""}402: {formatUsd(probe.quote.amount)} USDG on Robinhood Chain to <span className="font-mono">{probe.quote.payTo.slice(0, 6)}…{probe.quote.payTo.slice(-4)}</span>
             {probe.quote.payeeName && <> · payee name <span className="font-mono">{probe.quote.payeeName}</span></>}
-            {probe.quote.networks.length > 1 && <> · also accepts {probe.quote.networks.filter((n) => n !== "eip155:4663" && n !== "robinhood").join(", ")}</>}.</>
+            {probe.quote.networks.some((n) => !isRobinhoodNetwork(n)) && <> · also accepts {probe.quote.networks.filter((n) => !isRobinhoodNetwork(n)).join(", ")}</>}.</>
         ) : (
           <span className="text-warn">Couldn&apos;t read the seller&apos;s price right now ({probe.reason}).</span>
         )}
