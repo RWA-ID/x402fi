@@ -3,7 +3,7 @@ import { verifyTypedData, type PublicClient, type Hex } from "viem";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import { usdToAtomic, atomicToUsd, formatUsd } from "@/lib/x402/money";
 import { buildPaymentRequired } from "@/lib/x402/requirements";
-import { verifyPayment, usdgDomain, transferWithAuthorizationTypes, splitSig } from "@/lib/x402/facilitator";
+import { verifyPayment, facilitatorPolicyReason, usdgDomain, transferWithAuthorizationTypes, splitSig } from "@/lib/x402/facilitator";
 import { encodeHeader, decodeHeader } from "@/lib/x402/encoding";
 import type { PaymentPayload } from "@/lib/x402/types";
 
@@ -106,9 +106,42 @@ describe("verifyPayment", () => {
     const { payment, req } = await signedPayment();
     expect(await verifyPayment(fakeClient({ fail: true }), payment, req)).toMatchObject({ isValid: false, invalidReason: "chain_unavailable", retryable: true });
   });
+  it("asks a gateway payment to outlast the seller's call, and reports the balance it read", async () => {
+    const { payment, req } = await signedPayment({ validBefore: NOW + 30n });
+    expect(await verifyPayment(fakeClient(), payment, req)).toMatchObject({ isValid: true });
+    expect(await verifyPayment(fakeClient(), payment, req, { minValiditySeconds: 40n })).toMatchObject({ isValid: false, invalidReason: "authorization_expired" });
+    const long = await signedPayment({ validBefore: NOW + 40n });
+    const out: { balance?: bigint } = {};
+    expect(await verifyPayment(fakeClient({ balance: 77n * 1000n }), long.payment, long.req, { minValiditySeconds: 40n, out })).toMatchObject({ isValid: true });
+    expect(out.balance).toBe(77_000n);
+  });
+  it("does not throw on missing requirements", async () => {
+    const { payment } = await signedPayment();
+    expect(await verifyPayment(fakeClient(), payment, undefined as never)).toMatchObject({ isValid: false, invalidReason: "malformed_payload" });
+  });
   it("splits a signature into v/r/s", async () => {
     const { payment } = await signedPayment();
     const { v } = splitSig(payment.payload.signature);
     expect([27, 28]).toContain(v);
+  });
+});
+
+describe("public facilitator policy", () => {
+  const withAuth = (over: Record<string, string>) => ({
+    x402Version: 2, accepted: {}, payload: { signature: "0x", authorization: { from: "0x3333333333333333333333333333333333333333", to: seller, value: "10000", validAfter: "0", validBefore: "1", nonce: "0x", ...over } },
+  }) as unknown as PaymentPayload;
+  it("refuses transfers that pay nobody, before any chain read", () => {
+    expect(facilitatorPolicyReason(withAuth({ value: "0" }))).toBe("amount_below_minimum");
+    expect(facilitatorPolicyReason(withAuth({ value: "9999" }))).toBe("amount_below_minimum");
+    expect(facilitatorPolicyReason(withAuth({ to: "0x3333333333333333333333333333333333333333" }))).toBe("self_transfer");
+    expect(facilitatorPolicyReason(withAuth({ value: "-1" }))).toBe("amount_below_minimum");
+    expect(facilitatorPolicyReason(withAuth({ value: "abc" }))).toBe("malformed_payload");
+    expect(facilitatorPolicyReason(withAuth({ to: "nope" }))).toBe("malformed_payload");
+    expect(facilitatorPolicyReason(undefined)).toBe("malformed_payload");
+    expect(facilitatorPolicyReason({} as PaymentPayload)).toBe("malformed_payload");
+  });
+  it("lets an ordinary payment through", () => {
+    expect(facilitatorPolicyReason(withAuth({}))).toBeNull();
+    expect(facilitatorPolicyReason(withAuth({ value: "10000" }))).toBeNull();
   });
 });

@@ -135,6 +135,7 @@ function pretty(s: string) {
 }
 
 const HUMAN: Record<string, string> = {
+  insufficient_funds_in_flight: "Your other calls in flight already use your USDG balance. Wait for them to finish, then try again.",
   insufficient_funds: "Your wallet does not have enough USDG on Robinhood Chain.",
   authorization_expired: "The signature expired before it arrived. Try again.",
   invalid_signature: "The signature did not match. If you use a smart-contract wallet, it may not support this yet.",

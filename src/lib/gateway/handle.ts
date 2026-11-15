@@ -16,11 +16,18 @@ import { parseContractConfig, quoteLabel, settleViaContract } from "@/lib/x402/c
 import { txUrl } from "@/lib/chains";
 import { checkDelivery, type DeliveryCheck } from "@/lib/delivery";
 import { scanMode } from "@/lib/textscan";
+import { RESERVE_SQL, reserveParams } from "./reserve";
 
 /** Upstream URL for the built-in demo service; served in-process (a Worker cannot fetch its own workers.dev host). */
 export const DEMO_UPSTREAM = "internal:demo";
 
 const UPSTREAM_TIMEOUT_MS = 25_000;
+/**
+ * A proxied call settles after the seller answers, so the authorization must outlast the
+ * seller's call and the settlement: the upstream timeout plus a margin. The 402 advertises
+ * maxTimeoutSeconds 120, so standard clients sign long enough.
+ */
+const GATEWAY_MIN_VALIDITY_SECONDS = BigInt(UPSTREAM_TIMEOUT_MS / 1000 + 15);
 const QUOTE_TIMEOUT_MS = 8_000;
 const MAX_BODY = 1_000_000;
 const HOP = new Set([
@@ -217,7 +224,8 @@ export async function handleGateway(req: Request, slug: string, path: string[]):
 
   const required = buildRequirements({ url: resourceUrl, description: service.summary || listing.summary, amountAtomic: amount, payTo: getAddress(listing.payTo) });
   const client = robinhoodClient(e);
-  const v = await verifyPayment(client, payment, required);
+  const seen: { balance?: bigint } = {};
+  const v = await verifyPayment(client, payment, required, { minValiditySeconds: GATEWAY_MIN_VALIDITY_SECONDS, out: seen });
   if (!v.isValid) {
     if (v.retryable) return json(503, { error: "Could not reach Robinhood Chain to check the payment. Nothing was charged; retry.", reason: v.invalidReason, detail: v.detail }, { "retry-after": "2" });
     // invalid_amount on a quoted endpoint means the price moved: the new 402 carries it.
@@ -227,24 +235,32 @@ export async function handleGateway(req: Request, slug: string, path: string[]):
   const sw = settlementWallet(e);
   if (!sw) return json(503, { error: "Settlement is not configured. Nothing was charged." });
 
-  // Claim the nonce first: D1's unique index makes a replayed payment lose here,
-  // before it can reach the upstream twice.
+  // Claim the nonce and reserve the funds first, in one statement. D1's unique index makes
+  // a replayed payment lose here, before it can reach the upstream twice; and the payer's
+  // other calls in flight count against the balance, so one balance cannot back several.
   const id = crypto.randomUUID();
+  let reserved: boolean;
   try {
-    await d.insert(payments).values({
+    const res = await e.DB.prepare(RESERVE_SQL).bind(...reserveParams({
       id,
       listingId: listing.id,
       serviceId: service.id,
       payer: v.payer,
       payTo: getAddress(listing.payTo),
-      amountAtomic: amount.toString(),
-      nonce: payment.payload.authorization.nonce.toLowerCase(),
-      status: "pending",
+      amountAtomic: amount,
+      nonce: payment.payload.authorization.nonce,
       requestPath: requestPath + incoming.search,
-    });
+      balance: seen.balance ?? amount,
+      now: Math.floor(Date.now() / 1000),
+    })).run();
+    // If the driver reports no row count, look for the row rather than refuse a good payment.
+    reserved = typeof res.meta?.changes === "number"
+      ? res.meta.changes > 0
+      : (await d.select({ id: payments.id }).from(payments).where(eq(payments.id, id)).limit(1)).length > 0;
   } catch {
     return challenge(listing, service, amount, resourceUrl, "authorization_already_used");
   }
+  if (!reserved) return challenge(listing, service, amount, resourceUrl, "insufficient_funds_in_flight");
 
   const started = Date.now();
   const finish = (patch: Partial<typeof payments.$inferInsert>) =>

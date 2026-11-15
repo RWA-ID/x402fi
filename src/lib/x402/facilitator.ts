@@ -9,6 +9,7 @@ import {
   type WalletClient,
 } from "viem";
 import { NETWORK, USDG } from "../chains";
+import { MIN_PRICE_ATOMIC } from "./money";
 import { transferWithAuthorizationTypes, usdgDomain } from "./eip712";
 export { transferWithAuthorizationTypes, usdgDomain };
 import type { PaymentPayload, PaymentRequirements, SettleResponse, VerifyResult } from "./types";
@@ -35,8 +36,40 @@ export const usdgAbi = [
   },
 ] as const;
 
-/** Seconds of slack: the authorization must stay valid long enough to land. */
+/**
+ * Seconds of slack: the authorization must stay valid long enough to land. The gateway
+ * asks for more, because it settles only after the seller has answered.
+ */
 const MIN_VALIDITY_SECONDS = 6n;
+
+export interface VerifyOptions {
+  /** How long the authorization must still be valid, in seconds of chain time. Default 6. */
+  minValiditySeconds?: bigint;
+  /** Filled with the payer's balance as read by the check, for callers that reserve funds. */
+  out?: { balance?: bigint };
+}
+
+/**
+ * What the public facilitator refuses before it reads the chain or spends gas: a transfer
+ * that pays nobody. x402Fi pays the gas of every settlement, so a zero-value transfer, a
+ * transfer to oneself or one below the minimum price would cost it gas for nothing.
+ * Returns the reason, or null when the payment may go on to be verified.
+ */
+export function facilitatorPolicyReason(payment: PaymentPayload | undefined | null): string | null {
+  const auth = payment?.payload?.authorization;
+  if (!auth) return "malformed_payload";
+  let from: Address, to: Address, value: bigint;
+  try {
+    from = getAddress(auth.from);
+    to = getAddress(auth.to);
+    value = BigInt(auth.value);
+  } catch {
+    return "malformed_payload";
+  }
+  if (isAddressEqual(from, to)) return "self_transfer";
+  if (value < MIN_PRICE_ATOMIC) return "amount_below_minimum";
+  return null;
+}
 
 const invalid = (invalidReason: string, payer?: Address, retryable = false): VerifyResult => ({
   isValid: false,
@@ -53,7 +86,9 @@ export async function verifyPayment(
   client: PublicClient,
   payment: PaymentPayload,
   required: PaymentRequirements,
+  opts: VerifyOptions = {},
 ): Promise<VerifyResult> {
+  if (!required) return invalid("malformed_payload");
   if (payment?.x402Version !== 2) return invalid("unsupported_x402_version");
   const a = payment.accepted;
   const auth = payment.payload?.authorization;
@@ -89,7 +124,7 @@ export async function verifyPayment(
     // Chain time, not Date.now(): this Mac's clock has run 29s slow before.
     const block = await client.getBlock({ blockTag: "latest" });
     const now = block.timestamp;
-    if (validBefore < now + MIN_VALIDITY_SECONDS) return invalid("authorization_expired", from);
+    if (validBefore < now + (opts.minValiditySeconds ?? MIN_VALIDITY_SECONDS)) return invalid("authorization_expired", from);
     if (validAfter > now) return invalid("authorization_not_yet_valid", from);
 
     const message = { from, to, value, validAfter, validBefore, nonce: auth.nonce };
@@ -110,6 +145,7 @@ export async function verifyPayment(
       client.readContract({ address: USDG.address, abi: usdgAbi, functionName: "balanceOf", args: [from] }),
     ]);
     if (used) return invalid("authorization_already_used", from);
+    if (opts.out) opts.out.balance = balance;
     if (balance < value) return invalid("insufficient_funds", from);
   } catch (err) {
     // Logged with the failing call so an outage is diagnosable from `wrangler tail`.

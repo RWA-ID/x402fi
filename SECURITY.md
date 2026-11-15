@@ -60,7 +60,8 @@ These are deliberate. Reports that show one of them failing are very welcome. Re
 
 - **x402Fi never holds funds.** A buyer's signed EIP-3009 authorization moves USDG straight from the buyer to the seller's payout address. Contract-mode listings pay the listing's contract, which acts in the same transaction. x402Fi's hot wallet only pays gas, and holds ETH for that alone.
 - **Settlement happens after the seller answers.** The gateway checks the payment, forwards the call, and settles only if the seller's API returned a success. A seller error is never charged.
-- **Each authorization settles at most once.** The payment's nonce is claimed in the database before the call is forwarded, so a replayed authorization never reaches the seller twice.
+- **Each authorization settles at most once.** The payment's nonce is claimed in the database before the call is forwarded, so a replayed authorization never reaches the seller twice. The same statement reserves the amount against the payer's other calls in flight, and the gateway only accepts an authorization that stays valid for the seller's timeout plus a settlement margin.
+- **The public facilitator settles for listed sellers only.** It pays gas only for a transfer of at least the minimum price, to the payout wallet of a listing on x402Fi, and never to the payer itself.
 - **Native listings are paid directly.** x402Fi lists them, and redirects buyers to the seller's own x402 endpoint, but never handles their payments.
 - **Secrets live in Cloudflare.** Nothing secret is in this repository. If you find one, that is in scope; please report it privately.
 

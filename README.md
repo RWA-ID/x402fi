@@ -62,7 +62,7 @@ x402Fi packages that into a product businesses and institutions can use without 
 | **Verified profiles** | Logo, website and X handle are read from the payee name's ENS records (verified ✓). Seller-entered values fill gaps and are labelled "by seller". |
 | **On-chain products** | A `contract` pricing mode settles by calling a seller contract (e.g. register a name and deliver it) in **one atomic transaction**. |
 | **Ledger and receipts** | Every paid attempt is recorded (settled, not charged, or API error). Each payment has a public receipt page with its transaction hash, and sellers can export a CSV. |
-| **Public facilitator** | `/api/facilitator/verify`, `/settle`, `/supported` for anyone building x402 on Robinhood Chain. |
+| **Public facilitator** | `/api/facilitator/verify`, `/settle`, `/supported` for sellers building x402 on Robinhood Chain. It settles to the payout wallet of a listing on x402Fi (a native listing counts), $0.01 or more. |
 | **Discovery feed** | Bazaar-style JSON of every paid endpoint for agents and indexers (`/api/discovery/resources`), with a readable view at [`/discovery`](https://x402fi.dev/discovery). Items carry the `bazaar` extension (how to call each endpoint); filters and pagination follow the Bazaar spec, and the SDK path `/api/facilitator/discovery/resources` works too. |
 | **MCP server** | `https://x402fi.dev/mcp` (Streamable HTTP, no auth): `search_services`, `get_listing`, `get_payment_requirements`. Search and describe only; it never pays, signs or calls a paid endpoint. |
 | **Native x402 listings** | Sellers whose endpoint already charges with x402 list it as is: x402Fi reads the price, `payTo` and payee name from their 402 and buyers pay the seller **directly**. x402Fi never proxies, settles or takes a fee on these. x402 v1 and v2 endpoints both list; a v1 endpoint is labelled as v1 everywhere, with the `X-PAYMENT` header. "Try it" is for proxied endpoints only. |
@@ -91,7 +91,7 @@ sequenceDiagram
     Note over A: Wallet signs EIP-3009 TransferWithAuthorization<br/>(exact amount, one-time nonce, expiry). No gas.
     A->>G: Same request + PAYMENT-SIGNATURE header
     G->>C: Verify: signature, amount, payTo, validity window,<br/>nonce unused, balance (chain time, not server time)
-    G->>G: Claim nonce in D1 (a replay loses here)
+    G->>G: Claim nonce + reserve funds in D1 (a replay loses here)
     G->>S: Forward request + X-X402Fi-Secret + X-X402Fi-Payer
     S-->>G: 200 OK + data
     G->>C: transferWithAuthorization (x402Fi pays gas)
@@ -164,7 +164,7 @@ x402Fi implements **x402 version 2**, scheme **`exact`**, on network **`eip155:4
 
 **USDG EIP-712 domain.** `{ name: "Global Dollar", version: "1", chainId: 4663, verifyingContract: 0x5fc5…d168 }`. The token has **no `version()` getter**; `"1"` was confirmed by reproducing its `DOMAIN_SEPARATOR()` on-chain. Signatures are EIP-3009 `TransferWithAuthorization` with v/r/s (EOA wallets).
 
-**Verification** (`src/lib/x402/facilitator.ts`): x402 version, scheme, network, asset, `payTo` and `to` match, `value` equals the price exactly, `validBefore` ≥ chain time + 6 s, `validAfter` ≤ chain time, signature recovers to `from` (`verifyTypedData`, which also supports ERC-1271/6492), nonce unused (`authorizationState`), and balance ≥ value. A failed chain read returns **503 retry**, never a denial.
+**Verification** (`src/lib/x402/facilitator.ts`): x402 version, scheme, network, asset, `payTo` and `to` match, `value` equals the price exactly, `validBefore` ≥ chain time + 6 s (the gateway asks for 40 s: the seller's 25 s timeout plus a settlement margin, since it settles after the seller answers), `validAfter` ≤ chain time, signature recovers to `from` (`verifyTypedData`, which also supports ERC-1271/6492), nonce unused (`authorizationState`), and balance ≥ value. A failed chain read returns **503 retry**, never a denial.
 
 ## Pricing modes
 
@@ -244,6 +244,9 @@ curl -X POST "https://x402fi.dev/g/ipfs-pinning/pin?name=hello.json" -H "content
 - **Non-custodial.** Payments go buyer → seller (or buyer → seller contract) under the buyer's own signature. The settlement wallet only holds ETH for gas and never receives USDG.
 - **Charge only for answers.** Fixed and quoted endpoints settle after the upstream returns 2xx; contract endpoints are atomic.
 - **Replay protection.** The authorization nonce is claimed in D1 under a unique index **before** the upstream is called, and USDG's `authorizationState` rejects reuse on-chain.
+- **Funds are reserved while a call is in flight.** The same statement that claims the nonce (`src/lib/gateway/reserve.ts`) inserts the row only if the payer's other pending payments plus this one fit in the balance the check read, so one balance cannot back several concurrent calls. A pending row stops counting after 3 minutes.
+- **One path, one endpoint.** A request whose decoded path has a dot segment or an encoded slash is answered `400` before an endpoint is matched, so it cannot be priced as one endpoint and forwarded to another. Caller-sent `x-x402fi-*` headers are never forwarded.
+- **The facilitator does not spend gas on transfers that pay nobody.** `/verify` and `/settle` refuse a zero or sub-minimum amount (`amount_below_minimum`), a transfer to the payer itself (`self_transfer`) and a `payTo` that is not the payout wallet of a live or paused listing (`pay_to_not_listed`).
 - **Upstream secret.** Every forwarded paid call carries `X-X402Fi-Secret` (per listing, rotatable) so sellers can reject calls that bypass the paywall, plus `X-X402Fi-Payer`.
 - **SSRF guard** (`src/lib/ssrf.ts`). https only, port 443, no credentials, no `localhost`/`.internal`/etc. Private, link-local, CGNAT, documentation and multicast ranges are blocked in **every notation**, including IPv4-mapped (`::ffff:127.0.0.1`), IPv4-compatible and NAT64 IPv6. **Every A/AAAA answer** is resolved over DoH before fetching, redirects are not followed, and requests time out. Workers also run with `global_fetch_strictly_public`.
 - **Native probes** are unpaid, SSRF-guarded, time-limited, available only to signed-in sellers, and never send a payment header.
@@ -258,14 +261,14 @@ curl -X POST "https://x402fi.dev/g/ipfs-pinning/pin?name=hello.json" -H "content
 
 ### Gateway
 
-`{METHOD} https://x402fi.dev/g/<slug>/<path>`. Standard x402 v2 as above. Status codes: `402` (pay), `200` (paid response), `307` (native endpoint: redirect to the seller's own URL, which the buyer pays directly), `400` (missing name for contract endpoints), `404` (unknown listing or path; lists the endpoints), `405` (wrong method; `Allow` header), `409` (name unavailable, with reason), `413` (body over 1 MB), `429` (seller's daily cap), `502` (upstream error; not charged), `503` (chain unreachable or paused; retry, not charged).
+`{METHOD} https://x402fi.dev/g/<slug>/<path>`. Standard x402 v2 as above. Status codes: `402` (pay; `insufficient_funds_in_flight` when the buyer's other calls in flight already use the balance), `200` (paid response), `307` (native endpoint: redirect to the seller's own URL, which the buyer pays directly), `400` (missing name for contract endpoints; or a path with a dot segment or an encoded slash), `404` (unknown listing or path; lists the endpoints), `405` (wrong method; `Allow` header), `409` (name unavailable, with reason), `413` (body over 1 MB), `429` (seller's daily cap), `502` (upstream error; not charged), `503` (chain unreachable or paused; retry, not charged).
 
 ### Facilitator
 
 | Endpoint | Body | Returns |
 |---|---|---|
 | `POST /api/facilitator/verify` | `{ paymentPayload, paymentRequirements }` | `{ isValid, payer }` or `{ isValid:false, invalidReason }` |
-| `POST /api/facilitator/settle` | same | `{ success, transaction, network, payer }` |
+| `POST /api/facilitator/settle` | same | `{ success, transaction, network, payer }` or `{ success:false, errorReason }`. `payTo` must be a listing's payout wallet. |
 | `GET /api/facilitator/supported` | — | `{ kinds:[{x402Version:2, scheme:"exact", network:"eip155:4663"}], extensions:["payee-name"] }` |
 
 ### Discovery

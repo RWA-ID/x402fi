@@ -12,6 +12,7 @@ app.use((req, res, next) => {
 });`;
 
 const selfHost = `// Self-hosted paywall that uses the x402Fi facilitator (Robinhood Chain, USDG).
+// payTo must be the payout wallet of a listing on x402Fi (a native listing counts).
 const FACILITATOR = "https://x402fi.dev/api/facilitator";
 const requirements = {
   scheme: "exact",
@@ -109,12 +110,12 @@ export default function Developers() {
       </a>
 
       <Section id="gateway" title="Behind the gateway">
-        <p>Paid calls reach your API with two extra headers: <code className="font-mono">X-X402Fi-Secret</code> (from your listing) and <code className="font-mono">X-X402Fi-Payer</code>. Check the secret so the paywall can&apos;t be bypassed.</p>
+        <p>Paid calls reach your API with two extra headers: <code className="font-mono">X-X402Fi-Secret</code> (from your listing) and <code className="font-mono">X-X402Fi-Payer</code>. Check the secret so the paywall can&apos;t be bypassed. A forwarded call has been checked (signature, amount, balance, and the funds are reserved against the buyer&apos;s other calls in flight) but it is settled only after your API answers 2xx. The gateway sets both headers itself and drops any <code className="font-mono">X-X402Fi-*</code> header a caller sends.</p>
         <Code>{verifySecret}</Code>
       </Section>
 
       <Section id="facilitator" title="Facilitator">
-        <p>x402 v2, scheme <code className="font-mono">exact</code>, network <code className="font-mono">eip155:4663</code>, asset USDG. x402Fi pays the gas for settlement and never holds funds.</p>
+        <p>x402 v2, scheme <code className="font-mono">exact</code>, network <code className="font-mono">eip155:4663</code>, asset USDG. x402Fi pays the gas for settlement and never holds funds. Because it pays the gas, the facilitator settles only to the payout wallet of a listing on x402Fi (list your own x402 endpoint as a native listing to use it), at least $0.01, and never a transfer to the payer itself; anything else is refused with <code className="font-mono">pay_to_not_listed</code>, <code className="font-mono">amount_below_minimum</code> or <code className="font-mono">self_transfer</code>.</p>
         <ul className="mt-3 space-y-1 font-mono text-sm">
           <li>POST /api/facilitator/verify</li>
           <li>POST /api/facilitator/settle</li>
