@@ -143,6 +143,51 @@ export const facilitatorSettles = sqliteTable(
   (t) => [primaryKey({ columns: [t.payTo, t.day] })],
 );
 
+/**
+ * An independent security review of one endpoint by HEY Research Lab (see lib/reviews).
+ * Lister-set states: requested, fixes_submitted. HEY-signed: findings_sent, reviewed, withdrawn.
+ * Repo, commit, contact and note are private to the lister and HEY (served on HEY's keyed feed).
+ */
+export const reviews = sqliteTable(
+  "reviews",
+  {
+    serviceId: text("service_id").primaryKey().references(() => services.id),
+    listingId: text("listing_id").notNull().references(() => listings.id),
+    state: text("state", { enum: ["requested", "findings_sent", "fixes_submitted", "reviewed", "withdrawn"] }).notNull(),
+    repoUrl: text("repo_url"),
+    /** The lister's commit: the one to review, then the one with the fixes. */
+    commit: text("commit"),
+    contact: text("contact").notNull(),
+    note: text("note"),
+    lastIssuedAt: integer("last_issued_at"),
+    reviewedCommit: text("reviewed_commit"),
+    reportUrl: text("report_url"),
+    reviewedAt: integer("reviewed_at"),
+    /** reviewTarget() when reviewed: method + upstream + path. Not public (proxied upstreams are private). */
+    reviewedTarget: text("reviewed_target"),
+    signer: text("signer"),
+    requestedAt: integer("requested_at").notNull().$defaultFn(now),
+    updatedAt: integer("updated_at").notNull().$defaultFn(now),
+  },
+  (t) => [index("reviews_listing_idx").on(t.listingId), index("reviews_state_idx").on(t.state)],
+);
+
+/** Every signed message HEY posted and x402Fi applied, kept with its signature so anyone can re-check it. */
+export const reviewEvents = sqliteTable(
+  "review_events",
+  {
+    id: text("id").primaryKey(),
+    serviceId: text("service_id").notNull().references(() => services.id),
+    state: text("state").notNull(),
+    message: text("message").notNull(), // JSON ReviewMessage as signed
+    signature: text("signature").notNull(),
+    signer: text("signer").notNull(),
+    createdAt: integer("created_at").notNull().$defaultFn(now),
+  },
+  (t) => [index("review_events_service_idx").on(t.serviceId, t.createdAt)],
+);
+
 export type Listing = typeof listings.$inferSelect;
+export type Review = typeof reviews.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
 export type Service = typeof services.$inferSelect;

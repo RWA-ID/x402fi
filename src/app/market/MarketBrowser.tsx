@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ListingCard } from "@/components/ListingCard";
+import { ListingCard, isReviewed } from "@/components/ListingCard";
 import type { PublicListing } from "@/lib/server/queries";
 import type { CardListing } from "@/lib/server/payeeBadges";
 
@@ -8,6 +8,7 @@ export function MarketBrowser({ rows }: { rows: CardListing[] }) {
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("All");
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [reviewedOnly, setReviewedOnly] = useState(false);
   const [sort, setSort] = useState<"popular" | "price" | "new">("popular");
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -23,13 +24,20 @@ export function MarketBrowser({ rows }: { rows: CardListing[] }) {
     const out = rows.filter((r) =>
       (cat === "All" || r.category === cat) &&
       (!verifiedOnly || r.payeeVerified === true) &&
+      (!reviewedOnly || isReviewed(r)) &&
       (!t || `${r.name} ${r.summary} ${r.description} ${r.identityName ?? ""}`.toLowerCase().includes(t)));
     // Free-only listings sort first; quote-only last.
     const key = (r: PublicListing) => (r.fromAtomic ? BigInt(r.fromAtomic) : r.hasQuote ? 10n ** 18n : 0n);
     if (sort === "price") out.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0));
     if (sort === "new") out.sort((a, b) => b.createdAt - a.createdAt);
+    // Featured first by default: an independent HEY review, then a verified payee. Stable, so
+    // "most used" order holds within each group.
+    if (sort === "popular") {
+      const rank = (r: CardListing) => (isReviewed(r) ? 2 : 0) + (r.payeeVerified ? 1 : 0);
+      out.sort((a, b) => rank(b) - rank(a));
+    }
     return out;
-  }, [rows, q, cat, verifiedOnly, sort]);
+  }, [rows, q, cat, verifiedOnly, reviewedOnly, sort]);
 
   return (
     <>
@@ -47,6 +55,10 @@ export function MarketBrowser({ rows }: { rows: CardListing[] }) {
           <input type="checkbox" checked={verifiedOnly} onChange={(e) => setVerifiedOnly(e.target.checked)} className="h-4 w-4 accent-[var(--forest)]" />
           Verified payees only
         </label>
+        {rows.some(isReviewed) && <label className="flex items-center gap-2 text-sm text-ink-2">
+          <input type="checkbox" checked={reviewedOnly} onChange={(e) => setReviewedOnly(e.target.checked)} className="h-4 w-4 accent-[var(--forest)]" />
+          Independently reviewed
+        </label>}
       </div>
       <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
         {cats.map((c) => (

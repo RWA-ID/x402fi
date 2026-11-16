@@ -20,6 +20,10 @@ export interface AppEnv {
   DELIVERY_SCAN?: string;
   /** Var: settlements the public facilitator pays for per payee and UTC day. Default 200. See lib/x402/settleBudget. */
   FACILITATOR_DAILY_SETTLES?: string;
+  /** Var: HEY Research Lab's published review-signing address(es), comma-separated. Unset = signed reviews refused. See lib/reviews. */
+  HEY_REVIEW_SIGNERS?: string;
+  /** Secret: bearer token HEY uses to read open review requests (GET /api/reviews/requests). */
+  HEY_REVIEW_FEED_TOKEN?: string;
 }
 
 /** Read bindings via OpenNext. Never `process.env` on Workers for bindings. */

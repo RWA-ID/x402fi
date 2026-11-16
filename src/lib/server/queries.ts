@@ -2,8 +2,13 @@ import "server-only";
 import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { listings, payments, services, type Listing, type Service } from "@/db/schema";
 import { db, envAsync } from "./env";
+import { publicReviews } from "./reviews";
+import type { PublicReview } from "@/lib/reviews";
 
-export type PublicService = Omit<Service, "quotePath" | "createdAt" | "updatedAt">;
+export type PublicService = Omit<Service, "quotePath" | "createdAt" | "updatedAt"> & {
+  /** HEY Research Lab review, public face only (see lib/reviews). Absent = none. */
+  review?: PublicReview;
+};
 // textScan is internal review data: never in a public listing.
 export type PublicListing = Omit<Listing, "upstreamSecret" | "upstreamUrl" | "textScan"> & {
   calls: number;
@@ -38,8 +43,13 @@ async function withServices(rows: Array<Omit<PublicListing, "services" | "fromAt
     .from(services)
     .where(inArray(services.listingId, rows.map((r) => r.id)))
     .orderBy(asc(services.sortOrder), asc(services.createdAt));
+  // A review lookup failing must not take the marketplace down with it.
+  const rev = await publicReviews(svc).catch((e) => { console.error("publicReviews", e); return new Map<string, PublicReview>(); });
   return rows.map((r) => {
-    const mine = svc.filter((s) => s.listingId === r.id).map(({ quotePath: _q, createdAt: _c, updatedAt: _u, ...s }) => s);
+    const mine: PublicService[] = svc.filter((s) => s.listingId === r.id).map(({ quotePath: _q, createdAt: _c, updatedAt: _u, ...s }) => {
+      const review = rev.get(s.id);
+      return review ? { ...s, review } : s;
+    });
     const live = mine.filter((s) => s.status === "live");
     // A native endpoint keeps the price read from the seller's 402 when it was saved: that is a known price, not a quote.
     const paid = live.filter((s) => (s.pricing === "fixed" || s.pricing === "native") && s.priceAtomic && BigInt(s.priceAtomic) > 0n).map((s) => BigInt(s.priceAtomic!));

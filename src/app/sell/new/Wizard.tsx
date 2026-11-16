@@ -10,8 +10,10 @@ import { slugify } from "@/lib/names";
 import { baseLooksLikeEndpoint, normalizePath, upstreamFor } from "@/lib/wizard";
 import { IdentityStep } from "./IdentityStep";
 import { Copy } from "@/components/Copy";
+import { EMPTY_REVIEW, ReviewFields, ReviewIntro, type ReviewDraft } from "@/components/ReviewRequest";
+import { validateRequest } from "@/lib/reviews";
 
-const STEPS = ["Service", "Endpoints", "Name", "Test", "Publish"] as const;
+const STEPS = ["Service", "Endpoints", "Name", "Test", "Review", "Publish"] as const;
 const CATEGORIES = ["Market data", "AI & agents", "Research", "Compliance & KYB", "Data feeds", "Developer tools", "Other"];
 const MAX_ENDPOINTS = 20;
 
@@ -40,12 +42,14 @@ export interface Draft {
   identityName: string;
   /** The endpoints already charge with x402: x402Fi lists them, buyers pay the seller directly. */
   native: boolean;
+  /** Optional: ask HEY Research Lab for an independent security review once published. */
+  review: ReviewDraft;
 }
 
 const newEndpoint = (over: Partial<EndpointDraft> = {}): EndpointDraft => ({
   id: Math.random().toString(36).slice(2, 10), name: "", method: "GET", path: "/", price: "0.01", free: false, example: "", exampleBody: "", exampleResponse: "", ...over,
 });
-const EMPTY: Draft = { name: "", summary: "", description: "", category: "", upstreamUrl: "", endpoints: [newEndpoint()], payTo: "", dailyCap: "", identityName: "", native: false };
+const EMPTY: Draft = { name: "", summary: "", description: "", category: "", upstreamUrl: "", endpoints: [newEndpoint()], payTo: "", dailyCap: "", identityName: "", native: false, review: EMPTY_REVIEW };
 const KEY = "x402fi:draft:v2";
 
 export function Wizard() {
@@ -55,7 +59,7 @@ export function Wizard() {
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setD((x) => ({ ...x, [k]: v }));
 
   // Unsent draft survives a reload (per-browser convenience only).
-  useEffect(() => { try { const s = localStorage.getItem(KEY); if (s) { const j = JSON.parse(s); setD({ ...EMPTY, ...j, endpoints: Array.isArray(j.endpoints) && j.endpoints.length ? j.endpoints.map((e: Partial<EndpointDraft>) => newEndpoint(e)) : EMPTY.endpoints }); } } catch {} }, []);
+  useEffect(() => { try { const s = localStorage.getItem(KEY); if (s) { const j = JSON.parse(s); setD({ ...EMPTY, ...j, review: { ...EMPTY_REVIEW, ...(j.review ?? {}) }, endpoints: Array.isArray(j.endpoints) && j.endpoints.length ? j.endpoints.map((e: Partial<EndpointDraft>) => newEndpoint(e)) : EMPTY.endpoints }); } } catch {} }, []);
   useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch {} }, [d]);
 
   const validate = (s: number) => {
@@ -85,6 +89,11 @@ export function Wizard() {
       if (!d.native && d.endpoints.every((ep) => ep.free)) e.endpoints = "At least one endpoint must be paid. Free endpoints sit next to the ones you charge for.";
       if (!isAddress(d.payTo.trim(), { strict: false })) e.payTo = d.native ? "Read your endpoints' 402s first: the payout wallet comes from them." : "Enter the wallet address that should receive USDG.";
       if (d.dailyCap.trim()) { try { usdToAtomic(d.dailyCap); } catch (err) { e.dailyCap = (err as Error).message; } }
+    }
+    if (s === 4 && d.review.want) {
+      const v = validateRequest(d.review);
+      if (!v.ok) Object.assign(e, v.errors);
+      if (d.review.endpoints.length && !d.endpoints.some((ep) => d.review.endpoints.includes(ep.id))) e.endpoints = "Pick at least one endpoint, or untick the review.";
     }
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -127,12 +136,13 @@ export function Wizard() {
         {step === 1 && <StepEndpoints d={d} set={set} errors={errors} />}
         {step === 2 && <IdentityStep d={d} onName={(n) => set("identityName", n)} />}
         {step === 3 && <StepTest d={d} />}
-        {step === 4 && <StepLive d={d} onDone={() => { try { localStorage.removeItem(KEY); } catch {} }} />}
+        {step === 4 && <StepReview d={d} set={set} errors={errors} />}
+        {step === 5 && <StepLive d={d} onDone={() => { try { localStorage.removeItem(KEY); } catch {} }} />}
 
-        {step < 4 && (
+        {step < 5 && (
           <div className="mt-10 flex items-center justify-between border-t border-line pt-6">
             <button onClick={back} disabled={step === 0} className="btn btn-ghost">Back</button>
-            <button onClick={next} className="btn btn-primary">{step === 2 && !d.identityName ? "Skip for now" : step === 3 ? "Review & publish" : "Continue"}</button>
+            <button onClick={next} className="btn btn-primary">{(step === 2 && !d.identityName) || (step === 4 && !d.review.want) ? "Skip for now" : step === 4 ? "Continue to publish" : "Continue"}</button>
           </div>
         )}
       </div>
@@ -469,11 +479,45 @@ function StepTest({ d }: { d: Draft }) {
   );
 }
 
+function StepReview({ d, set, errors }: StepProps) {
+  const r = d.review;
+  const setR = (p: Partial<ReviewDraft>) => set("review", { ...r, ...p });
+  return (
+    <div className="space-y-6">
+      <Heading title="Security review (optional)" sub="Ask for an independent review of your endpoints. You can also do this later from your dashboard." />
+      <div className="card space-y-5 p-5">
+        <ReviewIntro />
+        <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-line p-3">
+          <input type="checkbox" checked={r.want} onChange={(e) => setR({ want: e.target.checked })} className="h-4 w-4" />
+          <span className="font-medium">Request a review when I publish</span>
+        </label>
+        {r.want && (
+          <ReviewFields r={r} set={setR} errors={errors}
+            endpoints={d.endpoints.map((ep) => [ep.id, `${ep.method} ${normalizePath(ep.path || "/")}`])} />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StepLive({ d, onDone }: { d: Draft; onDone: () => void }) {
   const [state, setState] = useState<"review" | "saving" | "done" | "error">("review");
   const [out, setOut] = useState<{ slug: string; upstreamSecret: string } | null>(null);
   const [err, setErr] = useState<string>("");
+  const [reviewNote, setReviewNote] = useState<{ ok: boolean; text: string } | null>(null);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
+  /** The listing is live either way: a failed review request is reported, and can be retried from the dashboard. */
+  const requestReview = async (listingId: string) => {
+    const picked = d.review.endpoints.length ? d.endpoints.filter((ep) => d.review.endpoints.includes(ep.id)) : d.endpoints;
+    const r = await fetch("/api/reviews", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      listingId, endpointKeys: picked.map((ep) => `${ep.method} ${normalizePath(ep.path || "/")}`),
+      repoUrl: d.review.repoUrl, commit: d.review.commit, contact: d.review.contact, note: d.review.note,
+    }) }).catch(() => null);
+    const j = r ? ((await r.json().catch(() => ({}))) as { requested?: string[]; error?: string; errors?: Record<string, string> }) : {};
+    setReviewNote(r?.ok
+      ? { ok: true, text: `Review requested from HEY Research Lab for ${j.requested?.length ?? 0} endpoint${j.requested?.length === 1 ? "" : "s"}. Your listing shows "Review in progress"; HEY will contact you.` }
+      : { ok: false, text: `Your listing is live, but the review request didn't go through (${j.error ?? Object.values(j.errors ?? {})[0] ?? "network error"}). Request it from your dashboard.` });
+  };
   const publish = async () => {
     setState("saving");
     const body = {
@@ -487,6 +531,7 @@ function StepLive({ d, onDone }: { d: Draft; onDone: () => void }) {
       const msgs = j.errors ? Object.entries(j.errors).map(([k, m]) => { const ep = /^endpoints\.(\d+)\./.exec(k); return ep ? `Endpoint ${Number(ep[1]) + 1}: ${m}` : m; }) : [j.error ?? "Could not publish."];
       setErr(msgs.join(" ")); setState("error"); return;
     }
+    if (d.review.want) await requestReview((j as unknown as { id: string }).id);
     setOut(j); setState("done"); onDone();
   };
   if (state === "done" && out) {
@@ -496,6 +541,7 @@ function StepLive({ d, onDone }: { d: Draft; onDone: () => void }) {
           <p className="eyebrow">Live</p>
           <h2 className="display mt-2 text-5xl">You’re open for <span className="italic">business.</span></h2>
         </div>
+        {reviewNote && <p className={`rounded-lg bg-card p-3 text-sm ${reviewNote.ok ? "text-ink-2" : "text-warn"}`}>{reviewNote.text}</p>}
         <div className="space-y-3">
           {d.endpoints.map((e) => {
             const path = normalizePath(e.path);
@@ -524,6 +570,7 @@ function StepLive({ d, onDone }: { d: Draft; onDone: () => void }) {
               ["Name", d.name], ["Summary", d.summary], ["Category", d.category], ["Base URL", d.upstreamUrl],
               ["Payout wallet", d.payTo], ["Daily limit", d.dailyCap ? `$${d.dailyCap}` : "None"],
               ["Named payee", d.identityName || "None yet (add one any time)"],
+              ["Security review", d.review.want ? "Request from HEY Research Lab on publish" : "Not requested (request one any time)"],
             ].map(([k, v]) => (
               <div key={k} className="grid gap-1 px-5 py-3 sm:grid-cols-[10rem_1fr]">
                 <dt className="text-ink-3">{k}</dt>

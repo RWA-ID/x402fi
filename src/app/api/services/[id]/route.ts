@@ -1,5 +1,5 @@
 import { and, eq, ne } from "drizzle-orm";
-import { payments, services } from "@/db/schema";
+import { payments, reviewEvents, reviews, services } from "@/db/schema";
 import { db, envAsync } from "@/lib/server/env";
 import { ownedListing, validateService, type ServiceInput } from "@/lib/server/services";
 import { nativeUrl, probeNative } from "@/lib/server/native";
@@ -57,7 +57,10 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   if (!seller) return Response.json({ error: "Sign in first." }, { status: 401 });
   if (!svc) return Response.json({ error: "Not found." }, { status: 404 });
   const paid = await d.query.payments.findFirst({ where: eq(payments.serviceId, svc.id), columns: { id: true } });
-  if (paid) {
+  // A reviewed or in-review endpoint keeps its review record (and HEY's signed messages) the same way.
+  const reviewed = await d.query.reviews.findFirst({ where: eq(reviews.serviceId, svc.id), columns: { serviceId: true } })
+    ?? await d.query.reviewEvents.findFirst({ where: eq(reviewEvents.serviceId, svc.id), columns: { id: true } });
+  if (paid || reviewed) {
     await d.update(services).set({ status: "paused", updatedAt: Math.floor(Date.now() / 1000) }).where(eq(services.id, svc.id));
     return Response.json({ ok: true, paused: true });
   }

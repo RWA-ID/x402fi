@@ -4,6 +4,10 @@ import type { PublicListing } from "@/lib/server/queries";
 import type { CardListing } from "@/lib/server/payeeBadges";
 import { ListingLogo } from "./ListingLogo";
 import { PayeePill } from "./PayeeSeal";
+import { ReviewedChip } from "./ReviewBadge";
+
+/** At least one live endpoint carries a current (not out-of-date) HEY review. */
+export const isReviewed = (l: PublicListing) => l.services.some((s) => s.status === "live" && s.review?.status === "reviewed");
 
 export function ListingCard({ l }: { l: CardListing }) {
   const paidLive = l.services.some((s) => s.status === "live" && s.pricing !== "free");
@@ -28,6 +32,7 @@ export function ListingCard({ l }: { l: CardListing }) {
         </div>
       </div>
       <p className="mt-3 line-clamp-2 text-sm leading-[1.5] text-ink-2">{l.summary}</p>
+      {isReviewed(l) && <div className="mt-2"><ReviewedChip /></div>}
       <div className="mt-auto flex items-center justify-between gap-3 pt-5">
         <PriceSummary l={l} />
         <span className="relative shrink-0">

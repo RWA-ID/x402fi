@@ -7,10 +7,11 @@ import { txUrl } from "@/lib/chains";
 import { useSession } from "@/lib/client/useSession";
 import { IdentityStep } from "@/app/sell/new/IdentityStep";
 import { EndpointsEditor } from "./EndpointsEditor";
+import { ReviewPanel, type DashEndpoint } from "./ReviewPanel";
 
 interface L { id: string; slug: string; name: string; status: "draft" | "live" | "paused"; priceAtomic: string; payTo: string; identityName: string | null; upstreamUrl: string; native: boolean; logoUrl: string | null; websiteUrl: string | null; xHandle: string | null; revenueAtomic: string; calls: number; missingExamples?: string[] }
 interface P { id: string; listingId: string; serviceId: string | null; payer: string; amountAtomic: string; status: string; txHash: string | null; error: string | null; createdAt: number; requestPath: string }
-interface Data { listings: L[]; payments: P[]; serviceNames: Record<string, string>; daily: { day: string; revenueAtomic: string; calls: number }[]; totals: { revenueAtomic: string; calls: number; failed: number } }
+interface Data { endpoints: DashEndpoint[]; listings: L[]; payments: P[]; serviceNames: Record<string, string>; daily: { day: string; revenueAtomic: string; calls: number }[]; totals: { revenueAtomic: string; calls: number; failed: number } }
 
 const STATUS: Record<string, [string, string]> = {
   settled: ["Paid", "text-good"],
@@ -82,7 +83,7 @@ function Inner({ seller }: { seller: string }) {
       ) : (
         <div className="mt-4 space-y-3">
           {data.listings.map((l) => (
-            <ListingRow key={l.id} l={l} patch={patch} notify={alertInline} reload={load} />
+            <ListingRow key={l.id} l={l} endpoints={data.endpoints.filter((e) => e.listingId === l.id)} patch={patch} notify={alertInline} reload={load} />
           ))}
         </div>
       )}
@@ -133,7 +134,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
   );
 }
 
-function ListingRow({ l, patch, notify, reload }: { l: L; patch: (id: string, b: object) => Promise<{ upstreamSecret?: string; ok: boolean }>; notify: (m: string) => void; reload: () => void }) {
+function ListingRow({ l, endpoints, patch, notify, reload }: { l: L; endpoints: DashEndpoint[]; patch: (id: string, b: object) => Promise<{ upstreamSecret?: string; ok: boolean }>; notify: (m: string) => void; reload: () => void }) {
   const [editing, setEditing] = useState<null | "payTo" | "name" | "profile">(null);
   const [prof, setProf] = useState({ logoUrl: "", websiteUrl: "", xHandle: "" });
   const [profErr, setProfErr] = useState("");
@@ -223,6 +224,7 @@ function ListingRow({ l, patch, notify, reload }: { l: L; patch: (id: string, b:
         </div>
       )}
       <EndpointsEditor listingId={l.id} slug={l.slug} onChange={reload} />
+      <ReviewPanel listingId={l.id} endpoints={endpoints} reload={reload} notify={notify} />
     </div>
   );
 }

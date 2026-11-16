@@ -14,6 +14,7 @@ import { isRobinhoodNetwork, paymentHeader } from "@/lib/x402/native";
 import { priceLabel } from "@/lib/gateway/services";
 import { addressUrl } from "@/lib/chains";
 import { PayeeBadge } from "@/components/PayeeBadge";
+import { ReviewBadge } from "@/components/ReviewBadge";
 import { TryIt } from "./TryIt";
 import { listingProfile } from "@/lib/server/profile";
 import { ListingLogo } from "@/components/ListingLogo";
@@ -141,6 +142,7 @@ export default async function ListingPage({ params }: P) {
                       <pre className="mt-2 overflow-x-auto font-mono text-[0.75rem]">{s.exampleResponse}</pre>
                     </details>
                   )}
+                  {s.review && <ReviewBadge review={s.review} serviceId={s.id} />}
                   {l.status === "live" && s.pricing !== "native" && (
                     <div className="border-t border-line px-5 py-4">
                       <TryIt
@@ -255,6 +257,7 @@ function NativeEndpoint({ s, url, probe }: { s: PublicService; url: string; prob
           <span className="text-warn">Couldn&apos;t read the seller&apos;s price right now ({probe.reason}).</span>
         )}
       </div>
+      {s.review && <ReviewBadge review={s.review} serviceId={s.id} />}
     </section>
   );
 }

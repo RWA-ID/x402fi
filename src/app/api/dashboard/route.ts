@@ -1,5 +1,6 @@
 import { desc, eq, inArray, sql } from "drizzle-orm";
-import { listings, payments, services } from "@/db/schema";
+import { listings, payments, reviews, services } from "@/db/schema";
+import { reviewTarget } from "@/lib/reviews";
 import { db, envAsync } from "@/lib/server/env";
 import { currentSeller } from "@/lib/server/session";
 
@@ -9,7 +10,7 @@ export async function GET() {
   const d = db(await envAsync());
   const mine = await d.select().from(listings).where(eq(listings.seller, seller)).orderBy(desc(listings.createdAt));
   const ids = mine.map((l) => l.id);
-  if (!ids.length) return Response.json({ listings: [], payments: [], daily: [], serviceNames: {}, totals: { revenueAtomic: "0", calls: 0, failed: 0 } });
+  if (!ids.length) return Response.json({ endpoints: [], listings: [], payments: [], daily: [], serviceNames: {}, totals: { revenueAtomic: "0", calls: 0, failed: 0 } });
 
   const since = Math.floor(Date.now() / 1000) - 30 * 86400;
   const [recent, daily, totals, perListing] = await Promise.all([
@@ -40,7 +41,7 @@ export async function GET() {
   ]);
   const per = new Map(perListing.map((p) => [p.id, p]));
   const svc = await d
-    .select({ id: services.id, name: services.name, listingId: services.listingId, pricing: services.pricing, status: services.status, exampleResponse: services.exampleResponse })
+    .select({ id: services.id, name: services.name, listingId: services.listingId, pricing: services.pricing, status: services.status, exampleResponse: services.exampleResponse, method: services.method, path: services.path })
     .from(services)
     .where(inArray(services.listingId, ids));
   // Live paid endpoints with no example response: agents (feed, MCP) cannot see what they would buy.
@@ -54,7 +55,23 @@ export async function GET() {
     const live = svc.filter((s) => s.listingId === id && s.status === "live");
     return live.length > 0 && live.every((s) => s.pricing === "native");
   };
+  // Security reviews, with the private states the lister needs (findings sent, fixes submitted).
+  const rv = await d.select().from(reviews).where(inArray(reviews.listingId, ids));
+  const R = new Map(rv.map((r) => [r.serviceId, r]));
+  const up = new Map(mine.map((l) => [l.id, l.upstreamUrl]));
+  const endpoints = svc.map((s) => {
+    const r = R.get(s.id);
+    return {
+      id: s.id, listingId: s.listingId, name: s.name, method: s.method, path: s.path, status: s.status,
+      review: r ? {
+        state: r.state, repoUrl: r.repoUrl, commit: r.commit, contact: r.contact,
+        reviewedCommit: r.reviewedCommit, reportUrl: r.reportUrl, reviewedAt: r.reviewedAt,
+        outOfDate: r.state === "reviewed" && r.reviewedTarget !== reviewTarget(s.method, s.path, up.get(s.listingId) ?? ""),
+      } : null,
+    };
+  });
   return Response.json({
+    endpoints,
     serviceNames: Object.fromEntries(svc.map((s) => [s.id, s.name])),
     listings: mine.map(({ upstreamSecret: _s, textScan: _t, ...l }) => ({ ...l, native: native(l.id), revenueAtomic: String(per.get(l.id)?.revenue ?? 0), calls: per.get(l.id)?.calls ?? 0, missingExamples: missing.get(l.id) ?? [] })),
     payments: recent.map(({ deliveryScan: _d, ...p }) => p),
