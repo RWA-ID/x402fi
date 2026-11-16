@@ -9,7 +9,20 @@ import { transferWithAuthorizationTypes, usdgDomain } from "@/lib/x402/eip712";
 import type { PaymentPayload, PaymentRequired, SettleResponse } from "@/lib/x402/types";
 import { formatUsd } from "@/lib/x402/money";
 import { ResponseCard, type PaidResponse } from "@/components/ResponseCard";
-import { buildTryUrl, fileError, formatBytes, jsonBodyError, tryFields, validateField } from "@/lib/tryit-fields";
+import { buildTryUrl, fileError, formatBytes, jsonBodyError, tryFields, validateField, type TryField } from "@/lib/tryit-fields";
+import { TokenField, useStockTokens } from "@/components/TokenField";
+import { byAddress, bySymbol, isTickerKey, isTokenAddressKey, type StockToken } from "@/lib/stock-tokens";
+
+/**
+ * Which fields get the Stock Token picker: a ticker parameter whose example is a known Stock
+ * Token (so a forex "symbol=EURUSD" stays a plain field), and a token-address parameter.
+ */
+function tokenMode(f: TryField, list: StockToken[] | null): "ticker" | "address" | null {
+  if (!list) return null;
+  if (f.kind === "text" && isTickerKey(f.key) && bySymbol(list, f.example)) return "ticker";
+  if (f.kind === "address" && (isTokenAddressKey(f.key) || byAddress(list, f.example))) return "address";
+  return null;
+}
 
 type Line = { t: string; tone?: "ok" | "bad" | "dim" };
 
@@ -36,6 +49,8 @@ export function TryIt({ slug, method, pathAndQuery, params, exampleBody, accepts
   const [fields] = useState(() => tryFields(params ?? {}));
   const [values, setValues] = useState<Record<string, string>>(() => ({ ...(params ?? {}) }));
   const [touched, setTouched] = useState<Record<string, boolean>>({});
+  // Only listings with a ticker or address field load the Stock Token list.
+  const stockTokens = useStockTokens(fields.some((f) => (f.kind === "text" && isTickerKey(f.key)) || f.kind === "address"));
   const hasBody = method === "POST" && !nameEntry;
   const fileMode = hasBody && !!acceptsFile;
   const [jsonBody, setJsonBody] = useState(() => pretty(exampleBody?.trim() || "{}"));
@@ -63,18 +78,25 @@ export function TryIt({ slug, method, pathAndQuery, params, exampleBody, accepts
 
   async function run() {
     if (nameEntry && !name.trim()) { setLog([{ t: "Type the name you want first.", tone: "bad" }]); return; }
+    // A ticker typed into a token-address field ("TSLA") becomes that Stock Token's address.
+    let vals = values;
+    for (const f of fields) {
+      const t = tokenMode(f, stockTokens) === "address" && !/^0x/i.test((vals[f.key] ?? "").trim()) ? bySymbol(stockTokens!, vals[f.key] ?? "") : undefined;
+      if (t) vals = { ...vals, [f.key]: t.a };
+    }
+    if (vals !== values) setValues(vals);
     // Check the inputs before anything is fetched or signed.
-    const bad = fields.find((f) => validateField(f, values[f.key] ?? ""));
+    const bad = fields.find((f) => validateField(f, vals[f.key] ?? ""));
     if (bad) {
       setTouched(Object.fromEntries(fields.map((f) => [f.key, true])));
-      setLog([{ t: `${bad.label}: ${validateField(bad, values[bad.key] ?? "")}`, tone: "bad" }]);
+      setLog([{ t: `${bad.label}: ${validateField(bad, vals[bad.key] ?? "")}`, tone: "bad" }]);
       return;
     }
     const bodyErr = fileMode ? fileError(file) : hasBody ? jsonBodyError(jsonBody) : null;
     if (bodyErr) { setLog([{ t: bodyErr, tone: "bad" }]); return; }
     const url = nameEntry
       ? `/g/${slug}${pathAndQuery}/${encodeURIComponent(name.trim().toLowerCase())}`
-      : fields.length ? buildTryUrl(slug, pathAndQuery, fields, values) : `/g/${slug}${pathAndQuery}`;
+      : fields.length ? buildTryUrl(slug, pathAndQuery, fields, vals) : `/g/${slug}${pathAndQuery}`;
     // A file goes as is, with its own type; otherwise the visitor's JSON (the seller's example to start).
     const init: RequestInit = method !== "POST"
       ? { method }
@@ -164,7 +186,10 @@ export function TryIt({ slug, method, pathAndQuery, params, exampleBody, accepts
         <div className="mb-3 space-y-3">
           {fields.map((f) => {
             const id = `try-${slug}-${pathAndQuery}-${f.key}`;
-            const err = touched[f.key] ? validateField(f, values[f.key] ?? "") : null;
+            const tm = tokenMode(f, stockTokens);
+            // A known ticker left in a token-address field is resolved on Try it, so it is not an error.
+            const resolvable = tm === "address" && !!bySymbol(stockTokens!, values[f.key] ?? "");
+            const err = touched[f.key] && !resolvable ? validateField(f, values[f.key] ?? "") : null;
             const mine = f.kind === "wallet" && address && values[f.key]?.toLowerCase() === address.toLowerCase();
             return (
               <div key={f.key}>
@@ -180,6 +205,19 @@ export function TryIt({ slug, method, pathAndQuery, params, exampleBody, accepts
                   )}
                   {f.kind === "wallet" && mine && <span className="text-xs text-ink-3">Your wallet</span>}
                 </div>
+                {tm ? (
+                  <TokenField
+                    mode={tm}
+                    list={stockTokens!}
+                    id={id}
+                    value={values[f.key] ?? ""}
+                    onChange={(v) => setValues((x) => ({ ...x, [f.key]: v }))}
+                    onBlur={() => setTouched((t) => ({ ...t, [f.key]: true }))}
+                    invalid={!!err}
+                    describedBy={err ? `${id}-err` : undefined}
+                    placeholder={tm === "ticker" ? "Ticker or company, e.g. TSLA" : "0x… or search a Stock Token, e.g. TSLA"}
+                  />
+                ) : (
                 <input
                   id={id}
                   className="field"
@@ -194,7 +232,8 @@ export function TryIt({ slug, method, pathAndQuery, params, exampleBody, accepts
                   aria-invalid={!!err}
                   aria-describedby={err ? `${id}-err` : undefined}
                 />
-                {err && <p id={`${id}-err`} className="mt-1 text-xs text-bad">{err}</p>}
+                )}
+                {err &&<p id={`${id}-err`} className="mt-1 text-xs text-bad">{err}</p>}
               </div>
             );
           })}
