@@ -25,19 +25,20 @@ x402Fi lets any business sell an API, a data feed, an AI agent or an on-chain pr
 7. [Verified Payee (x402 Identity)](#verified-payee-x402-identity)
 8. [On-chain settlement: HoodFi name registration](#on-chain-settlement-hoodfi-name-registration)
 9. [Our services on x402Fi: IPFS Pinning](#our-services-on-x402fi-ipfs-pinning)
-10. [Security model](#security-model)
-11. [Public APIs](#public-apis)
-12. [Data model](#data-model)
-13. [Project structure](#project-structure)
-14. [Local development](#local-development)
-15. [Configuration and secrets](#configuration-and-secrets)
-16. [Database migrations](#database-migrations)
-17. [Deploying](#deploying)
-18. [Testing](#testing)
-19. [Operations](#operations)
-20. [Known traps](#known-traps)
-21. [Reference values](#reference-values)
-22. [Legal](#legal)
+10. [Security reviews (HEY Research Lab)](#security-reviews-hey-research-lab)
+11. [Security model](#security-model)
+12. [Public APIs](#public-apis)
+13. [Data model](#data-model)
+14. [Project structure](#project-structure)
+15. [Local development](#local-development)
+16. [Configuration and secrets](#configuration-and-secrets)
+17. [Database migrations](#database-migrations)
+18. [Deploying](#deploying)
+19. [Testing](#testing)
+20. [Operations](#operations)
+21. [Known traps](#known-traps)
+22. [Reference values](#reference-values)
+23. [Legal](#legal)
 
 ---
 
@@ -68,11 +69,12 @@ x402Fi packages that into a product businesses and institutions can use without 
 | **Native x402 listings** | Sellers whose endpoint already charges with x402 list it as is: x402Fi reads the price, `payTo` and payee name from their 402 and buyers pay the seller **directly**. x402Fi never proxies, settles or takes a fee on these. x402 v1 and v2 endpoints both list; a v1 endpoint is labelled as v1 everywhere, with the `X-PAYMENT` header. "Try it" is for proxied endpoints only. |
 | **Priors credit records** | Listings show the payout wallet's [Priors](https://priors.trade) record (ERC-8004 agent credit on Robinhood Chain): score, loans repaid, defaults. |
 | **HoodFi payee names** | A `*.hoodfi.eth` name, native to Robinhood Chain, can be the payee name: its records are written in one Robinhood Chain transaction, and sellers can register one in the wizard over x402. |
-| **Listing wizard** | Five steps: service → endpoints (as many as you sell, each with its own path and price, or free) → name → connection test → publish. Proxied or native. The name step suggests payee names from the service name, checked live on HoodFi Names (Robinhood Chain, USDG) and x402 Identity (Ethereum), registers them in place, and reads an existing name's records first so a name already set up needs no signature. |
-| **Dashboard** | Revenue, a 30-day chart, ledger, CSV export, pause, payout rotation, upstream secret rotation, profile and endpoint editing (price, free, example request/body/response). A notice names any live paid endpoint without an example response, since that is what agents read before paying. |
+| **Security reviews** | Independent code reviews by [HEY Research Lab](https://heyresearch.xyz), in a review program run with x402Fi. A seller requests one in the wizard or dashboard; HEY signs each state (EIP-712) and a reviewed endpoint shows HEY's line, the commit, the report and a signed proof. See [Security reviews](#security-reviews-hey-research-lab). |
+| **Listing wizard** | Six steps: service → endpoints (as many as you sell, each with its own path and price, or free) → name → connection test → security review (optional) → publish. Proxied or native. The name step suggests payee names from the service name, checked live on HoodFi Names (Robinhood Chain, USDG) and x402 Identity (Ethereum), registers them in place, and reads an existing name's records first so a name already set up needs no signature. |
+| **Dashboard** | Revenue, a 30-day chart, ledger, CSV export, pause, payout rotation, upstream secret rotation, profile and endpoint editing (price, free, example request/body/response), and the security review panel (request, submit fixes, cancel). A notice names any live paid endpoint without an example response, since that is what agents read before paying. |
 | **Example responses** | Each endpoint can show what a successful call returns: on the listing page, and as the `bazaar` output example in the feed and MCP. Text that looks like JSON must parse. |
 | **Wallet sign-in** | Sign-In with Ethereum (EIP-4361). Works with injected, WalletConnect, email and social wallets (Reown AppKit). Disconnecting the wallet also ends the dashboard session, and Sign out also disconnects the wallet: one action either way. |
-| **Light and dark themes** | Cream-and-forest design system, phone-first layout. |
+| **Design** | Cream-and-forest design system, light theme only (dark mode was retired), phone-first layout. |
 
 Listing is **free** and x402Fi takes **0%**. The only optional paid step in the flow is registering an x402 Identity name (a third-party ENS registrar, paid on Ethereum).
 
@@ -239,6 +241,28 @@ Pins are kept for **2 years** (`pinned_until` is in every response), then a dail
 curl -X POST "https://x402fi.dev/g/ipfs-pinning/pin?name=hello.json" -H "content-type: application/json" -d '{"hello":"world"}'
 ```
 
+## Security reviews (HEY Research Lab)
+
+A review program run in collaboration with [HEY Research Lab](https://heyresearch.xyz). Free for listers today. One review per endpoint; rules in `src/lib/reviews.ts`.
+
+| State | Set by | Buyers see |
+|---|---|---|
+| `requested` | the lister (wizard "Review" step or dashboard) | "Review in progress" |
+| `findings_sent` | HEY, signed | "Review in progress" |
+| `fixes_submitted` | the lister, naming the commit with the fixes | "Review in progress" |
+| `reviewed` | HEY, signed, after re-testing at a pinned commit | HEY's line, commit, date, report, signed proof |
+| `withdrawn` | HEY, signed | nothing: the review comes off the listing |
+
+The three in-progress states look the same in public, by design, so nobody can tell findings exist before they are fixed. A `reviewed` endpoint falls back to **out of date** once its method, path or upstream URL changes (`reviewTarget()`).
+
+**Signatures.** HEY POSTs `{ message, signature }` to `/api/reviews/hey`. EIP-712 domain `{ name: "HEY Security Review", version: "1" }` (no chainId, no verifyingContract), primary type `Review(string listing, string endpoint, string commit, string reportUrl, string state, uint64 issuedAt)`. The signature must recover to an address in `HEY_REVIEW_SIGNERS`; HEY publishes its signer at `https://heyresearch.xyz/api/v1/security-review/signer`. `issuedAt` must increase per endpoint (checked against the row and the signed-event log, so a replay is `409`) and must not predate the lister's latest request. `reviewed` needs a 7 to 64 hex commit and an https `reportUrl`. Every applied message is kept in `review_events`.
+
+**Wording** (agreed with HEY): the reviewed line is exactly "Independent review by HEY Research Lab, findings fixed and re-tested". Say "collaboration" or "review program"; never "audited", "safe", "partner", "certified" or "verified by". The home page card (`ReviewProgramCard`, `/#security-reviews`) carries HEY's disclaimer: a review covers the reviewed commit only, is not a guarantee about the endpoint or its operator, is not an audit or an endorsement, and HEY can withdraw it.
+
+**Where it shows:** a card in the listing sidebar (logo + status across endpoints), a line on each endpoint card, a chip, a "reviewed" filter and a ranking boost on the marketplace, and the dashboard panel (where the lister also sees `findings_sent`). HEY's logo is `public/partners/hey-research-lab.svg` (traced from HEY's files; a `-dark.svg` exists for dark backgrounds).
+
+Tested end to end on production on 2026-11-17 with `demo-quote`: `findings_sent` → `fixes_submitted` → `reviewed` → `withdrawn`.
+
 ## Security model
 
 - **Non-custodial.** Payments go buyer → seller (or buyer → seller contract) under the buyer's own signature. The settlement wallet only holds ETH for gas and never receives USDG.
@@ -287,6 +311,16 @@ curl -X POST "https://x402fi.dev/g/ipfs-pinning/pin?name=hello.json" -H "content
 
 `POST /api/listings/probe-native` `{ url, method, body }` reads a seller's own x402 endpoint once, unpaid, and returns its USDG / Robinhood Chain price, `payTo`, payee name and offered networks.
 
+### Security reviews
+
+| Route | Who | What |
+|---|---|---|
+| `POST /api/reviews` | signed-in lister | Request a review: `{ listingId, serviceIds?, repoUrl?, commit?, contact, note? }` (default: every live endpoint). |
+| `PATCH /api/reviews/<serviceId>` | signed-in lister | `{ action: "fixes_submitted", commit, note? }` after findings, or `{ action: "cancel" }`. |
+| `POST /api/reviews/hey` | HEY (signed) | Apply a signed state; `GET` describes the format and lists the configured signers. |
+| `GET /api/reviews/requests` | HEY (`Bearer HEY_REVIEW_FEED_TOKEN`) | Open requests with repo, commit, contact and endpoint details. |
+| `GET /api/reviews/proof/<serviceId>` | public | The signed `reviewed` message, domain, types and signature, to check against HEY's published signer. `404` unless the endpoint is currently reviewed. |
+
 ## Data model
 
 D1 (SQLite) via Drizzle, schema in `src/db/schema.ts`, migrations in `migrations/`.
@@ -298,6 +332,8 @@ D1 (SQLite) via Drizzle, schema in `src/db/schema.ts`, migrations in `migrations
 | `services` | Endpoints of a listing: method, path, pricing (`free`/`fixed`/`quote`/`contract`/`native`), price, quote path, ceiling, contract config, examples (incl. the JSON body used to probe a native POST endpoint), order, status. |
 | `facilitator_settles` | Settlements the public facilitator paid gas for, per payee and UTC day (the daily budget). |
 | `payments` | The ledger: listing, endpoint, payer, payee, amount, unique nonce, status (`pending`/`settled`/`settle_failed`/`upstream_failed`), tx hash, error, path, upstream status, latency. |
+| `reviews` | One security review per endpoint: state, lister's repo/commit/contact/note, last applied `issuedAt`, reviewed commit, report URL, reviewed target, signer, requested/updated times. |
+| `review_events` | Every signed HEY message applied: endpoint, state, message JSON, signature, signer. |
 
 KV stores SIWE nonces (10 min), payee verdicts, ENS profiles, native-endpoint probes and Priors records (10 min each; failures 60 s).
 
@@ -309,15 +345,15 @@ src/
     page.tsx                     landing page
     learn/ institutions/ developers/ discovery/ terms/ privacy/ disclaimer/
     market/                      marketplace + listing pages (TryIt)
-    sell/new/                    5-step listing wizard (multi-endpoint, free or paid, example responses; HoodFi / x402 Identity name suggestions)
-    dashboard/                   seller dashboard + endpoint editor
+    sell/new/                    6-step listing wizard (multi-endpoint, free or paid, example responses; HoodFi / x402 Identity name suggestions; review request)
+    dashboard/                   seller dashboard + endpoint editor + review panel
     receipt/[id]/                public receipts
     g/[slug]/[[...path]]/        x402 gateway route
     mcp/                         MCP server endpoint (Streamable HTTP, stateless)
     llms.txt/                    /llms.txt, generated from the discovery feed
     og/listing/[slug]/           1200x630 share cards
-    api/                         facilitator (+ discovery alias for the SDKs), discovery, auth, listings (+ probe-native), services, dashboard, payments CSV, logo, rpc
-  components/                    header, footer, handshake explainer, cards, payee + Priors badges, wallet button, legal layout
+    api/                         facilitator (+ discovery alias for the SDKs), discovery, auth, listings (+ probe-native), services, dashboard, payments CSV, logo, rpc, reviews
+  components/                    header, footer, handshake explainer, cards, payee + Priors badges, review badge/card + home program card, wallet button, legal layout
   db/schema.ts                   Drizzle schema
   lib/
     chains.ts                    Robinhood Chain, USDG, coin type
@@ -326,7 +362,7 @@ src/
     mcp/                         MCP tools (search, listing, payment requirements) + pure search ranking
     server/                      env bindings, chain clients, session, queries, payee, profile, discovery, native probe, Priors, validation
     client/                      wagmi/AppKit config, SIWE session hook, payee-record writers (ENS on Ethereum, HoodFi on Robinhood Chain)
-    ssrf.ts  profile.ts  priors.ts
+    ssrf.ts  profile.ts  priors.ts  reviews.ts (review states, EIP-712 types, signed-message rules)
 migrations/                      D1 SQL migrations
 scripts/                         seed-demo.mjs, seed-hoodfi.mjs, pay-demo.mjs
 test/                            Vitest unit tests
@@ -357,6 +393,10 @@ Secrets live in Cloudflare (`wrangler secret put NAME`) and locally in **`.dev.v
 | `ROBINHOOD_RPC_URL` | strongly recommended | Dedicated Robinhood Chain RPC (e.g. Alchemy `robinhood-mainnet`). The public RPC rate-limits Cloudflare Workers. |
 | `MAINNET_RPC_URL` | recommended | Ethereum RPC for ENS reads (server-side key, no domain allowlist). |
 | `NEXT_PUBLIC_REOWN_PROJECT_ID` | optional | Reown/WalletConnect project ID (a default is built in). |
+| `HEY_REVIEW_SIGNERS` | for reviews | Comma-separated addresses allowed to sign review states (HEY's published signer; add the new one before removing the old when HEY rotates). Unset = signed states answer `503`. |
+| `HEY_REVIEW_FEED_TOKEN` | for reviews | Bearer token for HEY's `GET /api/reviews/requests`. Shared with HEY privately; rotate with a new `wrangler secret put`. |
+
+Plain vars in `wrangler.jsonc`: `LISTING_TEXT_SCAN`, `DELIVERY_SCAN` (listing scans), and optionally `FACILITATOR_DAILY_SETTLES` (default 200 per payee per UTC day).
 
 Bindings (`wrangler.jsonc`): `DB` (D1 `x402fi`), `KV`, `ASSETS`. Custom domain `x402fi.dev`; `workers_dev` stays enabled.
 
@@ -386,7 +426,7 @@ npm test           # Vitest
 npm run typecheck
 ```
 
-Unit tests cover the money math, the 402 shape, verification against signed authorizations (wrong amount, payee, expiry, reuse, balance, tampering, RPC failure = retryable), the SSRF guard (every blocked notation plus public controls), endpoint routing and quotes, label parsing, the price minimum, profile parsing, native 402 parsing (v1 and v2, header and body) and Priors record parsing.
+Unit tests cover the money math, the 402 shape, verification against signed authorizations (wrong amount, payee, expiry, reuse, balance, tampering, RPC failure = retryable), the SSRF guard (every blocked notation plus public controls), endpoint routing and quotes, label parsing, the price minimum, profile parsing, native 402 parsing (v1 and v2, header and body), Priors record parsing, and the review rules (signature recovery, other signers and tampered messages refused, replays, messages older than the lister's request or dated in the future, commit and report URL checks, identical public in-progress states, out of date on endpoint change, lister moves per state).
 
 End-to-end checks that need no money: send a payment signed by a throwaway wallet with **no funds**. A healthy gateway answers `402 insufficient_funds`; a `503` means the chain was unreachable. A real paid test: `node --dns-result-order=ipv4first scripts/pay-demo.mjs` (run by the wallet owner; refuses anything above $0.01).
 
@@ -427,6 +467,7 @@ End-to-end checks that need no money: send a payment signed by a throwaway walle
 | HoodFi registrar | `0x56be5565acc823f4195c2cf3b9046C083633209a` |
 | HoodFi L2 registry | `0xf2bABA012244bdD7445129597350054E1B3aEe5C` |
 | x402 Identity registrar (Ethereum) | `0xeb9e9ea385fe28b51a3f9a7d93fb893e0a1f9633` |
+| HEY review signer | `0x38DD416262A6dAE08470E4564A01cfE363143269` (check it at `heyresearch.xyz/api/v1/security-review/signer`) |
 
 ## Legal
 

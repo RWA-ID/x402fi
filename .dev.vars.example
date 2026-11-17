@@ -5,3 +5,6 @@ SETTLEMENT_PRIVATE_KEY=0x...
 # Optional keyed RPCs (public ones throttle Workers)
 ROBINHOOD_RPC_URL=
 MAINNET_RPC_URL=
+# Security reviews (HEY Research Lab): comma-separated signer addresses, and the token for their requests feed
+HEY_REVIEW_SIGNERS=
+HEY_REVIEW_FEED_TOKEN=
