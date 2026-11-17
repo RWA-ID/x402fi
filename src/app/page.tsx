@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { Handshake } from "@/components/Handshake";
 import { ListingCard } from "@/components/ListingCard";
+import { ReviewProgramCard } from "@/components/ReviewProgramCard";
 import { liveListings } from "@/lib/server/queries";
 import { withPayeeBadges } from "@/lib/server/payeeBadges";
 
@@ -74,6 +75,9 @@ export default async function Home() {
           </div>
         ))}
       </section>
+
+      {/* Security reviews with HEY Research Lab */}
+      <ReviewProgramCard />
 
       {/* Institutions block */}
       <section className="mt-20 bg-forest px-4 py-16 text-forest-ink sm:px-6 sm:py-20">

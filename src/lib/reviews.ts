@@ -26,7 +26,7 @@ export const REVIEWER = {
   name: "HEY Research Lab",
   url: "https://heyresearch.xyz",
   x: "heyresearch",
-  logo: "/partners/hey-research-lab.png",
+  logo: "/partners/hey-research-lab.svg",
 } as const;
 
 /** HEY's exact public wording for a reviewed endpoint. */
