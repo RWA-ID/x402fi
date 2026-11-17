@@ -10,7 +10,7 @@ export function PriorsBadge({ record }: { record: PriorsRecord }) {
   const tone = record.defaulted ? "text-bad" : record.verdict === "repaid" ? "text-good" : "text-ink-2";
   const title = record.defaulted ? "Defaulted on a Priors loan" : record.verdict === "repaid" ? "Priors credit record" : "On Priors, no repayments yet";
   return (
-    <div className="card p-5 text-sm">
+    <div className="card p-4 text-sm">
       <div className={`flex items-center gap-2 font-medium ${tone}`}>
         <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
           <path d="M2.5 12.5h11M4 12.5V8m4 4.5V5m4 7.5V3" />

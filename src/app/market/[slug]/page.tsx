@@ -14,7 +14,7 @@ import { isRobinhoodNetwork, paymentHeader } from "@/lib/x402/native";
 import { priceLabel } from "@/lib/gateway/services";
 import { addressUrl } from "@/lib/chains";
 import { PayeeBadge } from "@/components/PayeeBadge";
-import { ReviewBadge } from "@/components/ReviewBadge";
+import { ReviewBadge, ReviewCard } from "@/components/ReviewBadge";
 import { TryIt } from "./TryIt";
 import { listingProfile } from "@/lib/server/profile";
 import { ListingLogo } from "@/components/ListingLogo";
@@ -165,22 +165,23 @@ export default async function ListingPage({ params }: P) {
           </div>
         </div>
 
-        <aside className="space-y-4">
-          <div className="card p-6">
+        <aside className="space-y-3">
+          <div className="card p-5">
             <div className="eyebrow">Paid to</div>
-            <dl className="mt-3 divide-y divide-line text-sm">
+            <dl className="mt-2 divide-y divide-line text-sm">
               <Row k="Currency" v="USDG (Paxos), on Robinhood Chain" />
               <Row k="Payout wallet" v={<a className="font-mono underline-offset-2 hover:underline" href={addressUrl(l.payTo)} target="_blank" rel="noreferrer">{l.payTo.slice(0, 6)}…{l.payTo.slice(-4)}</a>} />
               {live.some((s) => s.pricing !== "free" && s.pricing !== "native") && <Row k="Paid calls" v={l.calls.toLocaleString()} />}
               <Row k="Endpoints" v={`${live.length} live${l.hasFree ? ", incl. free" : ""}`} />
               {l.dailyCapAtomic && <Row k="Daily limit" v={formatUsd(l.dailyCapAtomic)} />}
             </dl>
-            <p className="mt-4 text-xs text-ink-3">
+            <p className="mt-3 text-xs text-ink-3">
               {allNative
                 ? "Paid directly to the seller over x402: x402Fi lists this service but never handles its payments."
                 : "Buyers pay no gas, and are only charged when the service answers successfully."}
             </p>
           </div>
+          <ReviewCard reviews={live.flatMap((s) => (s.review ? [{ review: s.review, serviceId: s.id, label: `${s.method} ${s.path}` }] : []))} />
           <PayeeBadge status={payee} />
           <PriorsBadge record={priors} />
           {l.status === "live" && <ShareOnX text={post} url={shareUrl} intent={xIntentUrl(post, shareUrl)} />}
@@ -264,7 +265,7 @@ function NativeEndpoint({ s, url, probe }: { s: PublicService; url: string; prob
 
 function Row({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-4 py-2.5">
+    <div className="flex justify-between gap-4 py-2">
       <dt className="text-ink-3">{k}</dt>
       <dd className="text-right">{v}</dd>
     </div>

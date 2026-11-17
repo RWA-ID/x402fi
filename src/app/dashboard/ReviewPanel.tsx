@@ -50,22 +50,32 @@ export function ReviewPanel({ listingId, endpoints, reload, notify }: { listingI
     return "";
   };
 
+  const header = (sub: React.ReactNode) => (
+    <div className="flex min-w-0 items-center gap-3">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={REVIEWER.logo} alt={REVIEWER.name} width={48} height={48} className="h-12 w-12 shrink-0 rounded-lg" />
+      <div className="min-w-0">
+        <div className="text-[0.68rem] uppercase tracking-wider text-ink-3">Security review</div>
+        <a href={REVIEWER.url} target="_blank" rel="noopener noreferrer" className="font-medium underline-offset-2 hover:underline">{REVIEWER.name}</a>
+        <div className="text-sm text-ink-2">{sub}</div>
+      </div>
+    </div>
+  );
+
   if (!any && !open) {
     return (
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line p-4 text-sm">
-        <span className="flex items-center gap-2 text-ink-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={REVIEWER.logo} alt="" width={20} height={20} className="h-5 w-5 rounded-[5px]" />
-          Get an independent security review from {REVIEWER.name}. Reviewed listings are featured.
-        </span>
+        {header("Get an independent security review. Reviewed listings are featured.")}
         {requestable.length > 0 && <button className="btn btn-ghost py-1.5" onClick={() => setOpen(true)}>Request a review</button>}
       </div>
     );
   }
+  const reviewed = endpoints.filter((e) => e.review?.state === "reviewed" && !e.review.outOfDate).length;
+  const withReview = endpoints.filter((e) => e.review).length;
   return (
     <div className="mt-4 rounded-xl border border-line p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="eyebrow">Security review</span>
+        {header(withReview ? (reviewed ? <span className="text-good">{reviewed} of {withReview} endpoint{withReview === 1 ? "" : "s"} reviewed</span> : "In progress") : "Request a review")}
         {!open && requestable.length > 0 && <button className="btn btn-ghost py-1.5 text-sm" onClick={() => setOpen(true)}>Request a review</button>}
       </div>
       {any && (

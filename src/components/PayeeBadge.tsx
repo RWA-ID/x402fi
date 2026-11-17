@@ -5,7 +5,7 @@ import { PayeeSeal } from "./PayeeSeal";
 export function PayeeBadge({ status }: { status: PayeeStatus }) {
   if (status.state === "none") {
     return (
-      <div className="card p-5 text-sm">
+      <div className="card p-4 text-sm">
         <div className="font-medium">No named payee</div>
         <p className="mt-1 text-ink-3">This seller has not linked an x402 Identity name, so buyers see only a wallet address.</p>
       </div>
@@ -18,7 +18,7 @@ export function PayeeBadge({ status }: { status: PayeeStatus }) {
       ? `The ENS name ${status.name} lists both this service's address and its payout wallet. Only the name's owner can set those records.`
       : REASON_TEXT[status.reason] ?? status.reason;
   return (
-    <div className="card p-5 text-sm">
+    <div className="card p-4 text-sm">
       <div className={`flex items-center gap-2 font-medium ${tone}`}>
         {status.state === "verified" ? (
           <PayeeSeal className="h-[18px] w-[18px]" />
@@ -30,8 +30,8 @@ export function PayeeBadge({ status }: { status: PayeeStatus }) {
         {title}
       </div>
       <p className="mt-1 font-mono text-[0.8rem]">{status.name}</p>
-      <p className="mt-2 text-ink-3">{body}</p>
-      <p className="mt-3 text-xs text-ink-3">Checked {new Date(status.checkedAt).toUTCString()} via the x402 payee-name spec.</p>
+      <p className="mt-1.5 text-[0.8rem] leading-snug text-ink-3">{body}</p>
+      <p className="mt-2 text-[0.7rem] text-ink-3">Checked {new Date(status.checkedAt).toUTCString()} via the x402 payee-name spec.</p>
     </div>
   );
 }
