@@ -89,6 +89,14 @@ const payeeExt = `// Name the payee in your 402 so agents can verify you (x402 p
 import { verifyPayee, viemReader } from "@x402identity/payee";
 const verdicts = await verifyPayee(paymentRequired, origin, viemReader(mainnetClient));`;
 
+const payeePriors = `// Paying with @priors/x402? The payee check is one line.
+import { viemReader } from "@x402identity/payee";
+import { payeeCheck } from "@x402identity/payee/priors";
+
+const payer = createPayer({ signer, /* ... */ beforePay: payeeCheck({ reader: viemReader(mainnetClient) }) });
+// A payee whose name does not list this origin and payTo is refused before anything is signed:
+// e.code === "BEFORE_PAY_REFUSED", e.cause.verdict says why.`;
+
 export default function Developers() {
   return (
     <div className="mx-auto max-w-4xl px-4 pt-14 sm:px-6">
@@ -147,7 +155,7 @@ export default function Developers() {
         <p className="mt-3 text-sm">
           Scan JSON responses as parsed values, as above: the scanner treats quoted text as someone describing an attack rather than making one, and in raw JSON every value is quoted.
           A clean scan catches careless injections; it does not prove a seller is honest. The guard and the cap are what hold.
-          To check <em>who</em> you are paying, add the <a className="underline" href="#payee">verified payee</a> check.
+          To check <em>who</em> you are paying, add the <a className="underline" href="#payee">verified payee</a> check. Using <code className="font-mono">@priors/x402</code>? It is one line.
         </p>
       </Section>
 
@@ -164,6 +172,11 @@ export default function Developers() {
       <Section id="payee" title="Verified payee">
         <Code>{payeeExt}</Code>
         <p className="mt-3">Spec: <a className="underline" href="https://github.com/RWA-ID/x402-Identity/blob/main/specs/extensions/payee-name.md">payee-name extension</a>. Records: <code className="font-mono">org.x402.origins</code> and the Robinhood Chain address (coin type 2147488311).</p>
+        <div className="mt-6"><Code>{payeePriors}</Code></div>
+        <p className="mt-3 text-sm">
+          A 402 with no payee name is paid unless you pass <code className="font-mono">missing: &quot;require&quot;</code>. When the chain cannot answer, the payment is held unless you pass <code className="font-mono">inconclusive: &quot;allow&quot;</code>; a payee that does not match is always refused. Needs an <code className="font-mono">@priors/x402</code> release that passes <code className="font-mono">extensions</code> to <code className="font-mono">beforePay</code> (<a className="underline" href="https://github.com/priors-agents/priors/pull/26" target="_blank" rel="noopener noreferrer">priors#26</a>); on an older one the hook refuses every payment and says why. Details in the{" "}
+          <a className="underline" href="https://github.com/RWA-ID/x402-Identity/tree/main/packages/payee#check-payees-before-paying-with-priors-x402identitypayeepriors" target="_blank" rel="noopener noreferrer">package README</a>.
+        </p>
       </Section>
 
       <Section id="usdg" title="USDG details">
