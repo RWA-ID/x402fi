@@ -273,7 +273,7 @@ function NativeEndpoint({ s, url, probe, live, payTo, slug }: { s: PublicService
             priceLabel={formatUsd(probe.quote.amount)}
             native={{ serviceId: s.id, payTo }}
           />
-          <p className="mt-2 text-xs text-ink-3">Paid straight to the seller&apos;s wallet; the seller settles it. x402Fi passes the request on and never holds the money.</p>
+          <p className="mt-2 text-xs text-ink-3">Paid straight to the seller&apos;s wallet. x402Fi passes the request on and never holds the money.</p>
         </div>
       )}
       {s.review && <ReviewBadge review={s.review} serviceId={s.id} />}

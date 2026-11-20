@@ -276,7 +276,7 @@ export function TryIt({ slug, method, pathAndQuery, params, exampleBody, accepts
         {busy ? "Working…" : pricing === "free" ? "Try the example · free" : !isConnected ? (nameEntry?.cta ? "Connect wallet to register" : "Connect a wallet to try it") : nameEntry ? nameEntry.cta ?? "Check price, then register" : `Try it · ${pricing === "quote" ? "see price, then pay" : `pay ${priceLabel}`}`}
       </button>
       {pricing === "free" && !nameEntry && <p className="mt-2 text-center text-xs text-ink-3">{fields.length ? "Runs with the values above. They start as the seller's example." : "Runs the seller's example request shown above."}</p>}
-      {pricing !== "free" && <p className="mt-2 text-center text-xs text-ink-3">Needs USDG on Robinhood Chain. No gas: x402Fi pays it.</p>}
+      {pricing !== "free" && <p className="mt-2 text-center text-xs text-ink-3">Needs USDG on Robinhood Chain. No gas: {native ? "the seller settles it." : "x402Fi pays it."}</p>}
       {log.length > 0 && (
         <ol className="mt-4 space-y-1 rounded-lg bg-forest p-3 font-mono text-[0.75rem] text-forest-ink">
           {log.map((l, i) => (
