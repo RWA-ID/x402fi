@@ -12,9 +12,9 @@ export function PriorsBadge({ record }: { record: PriorsRecord }) {
   return (
     <div className="card p-4 text-sm">
       <div className={`flex items-center gap-2 font-medium ${tone}`}>
-        <svg viewBox="0 0 16 16" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden>
-          <path d="M2.5 12.5h11M4 12.5V8m4 4.5V5m4 7.5V3" />
-        </svg>
+        {/* Priors' own mark, unaltered (priors.trade/logo.svg). */}
+        {/* eslint-disable-next-line @next/next/no-img-element -- a 1 KB static SVG */}
+        <img src="/partners/priors.svg" alt="Priors" width={20} height={20} className="h-5 w-5 shrink-0 rounded-[5px]" />
         {title}
       </div>
       <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
