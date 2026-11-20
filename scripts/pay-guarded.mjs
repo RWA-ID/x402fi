@@ -3,7 +3,8 @@
 // through AgentWormhole's guard (wormhole-x402) and checks what came back.
 // Run it yourself:   cd ~/x402fi && node --dns-result-order=ipv4first scripts/pay-guarded.mjs [url] [envFile] [envVar]
 // Defaults: the $0.01 demo, ~/hoodfi-eth/contracts/.env, PRIVATE_KEY. The key is read at
-// run time and never printed. The guard's spending cap refuses anything above $0.01.
+// run time and never printed. The guard's spending cap refuses anything above MAX_USDG
+// (default 0.01): e.g. MAX_USDG=1 node … to pay a $1 endpoint, once.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -20,11 +21,16 @@ const m = readFileSync(envFile, "utf8").match(new RegExp(`^${envVar}=["']?(0x)?(
 if (!m) { console.error(`No ${envVar} in ${envFile}`); process.exit(1); }
 const account = privateKeyToAccount(`0x${m[2]}`);
 const stop = (msg) => { console.error(`STOPPED      ${msg}`); process.exit(1); };
+const CAP = String(Math.round(Number(process.env.MAX_USDG ?? "0.01") * 1e6));
+if (!(Number(CAP) > 0)) stop("MAX_USDG must be a positive number of USDG");
 
 // 1. Ask for the price. The 402 is the seller's text: scan it before any of it reaches a model.
 const first = await fetch(url);
 if (first.status !== 402) stop(`expected 402, got ${first.status}`);
-const pr = await first.json();
+// x402 v2 puts the terms in the PAYMENT-REQUIRED header; some sellers leave the body's
+// accepts empty (MVA Roast does), so the header wins when it is there.
+const prHeader = first.headers.get("payment-required");
+const pr = prHeader ? JSON.parse(Buffer.from(prHeader, "base64").toString()) : await first.json();
 const scan = inspectQuoteText(pr);
 console.log(`402 text     ${scan.decision}${scan.findings.length ? " " + scan.findings.map((f) => f.code).join(",") : ""}`);
 if (scan.decision !== "allow") stop("the 402 carries text aimed at the agent");
@@ -37,7 +43,7 @@ console.log(`quote        ${Number(req.amount) / 1e6} USDG → ${req.payTo}`);
 //    any other signing request, and caps what one payment and the guard's lifetime can move.
 const quote = evmQuoteFromRequirements(req);
 const wallet = guardEvmSigner(account, () => quote, {
-  spendPolicy: { maxPerPayment: { [USDG]: "10000" }, maxTotal: { [USDG]: "10000" } }, // $0.01, once
+  spendPolicy: { maxPerPayment: { [USDG]: CAP }, maxTotal: { [USDG]: CAP } }, // MAX_USDG, once
 });
 const now = BigInt(Math.floor(Date.now() / 1000));
 const message = {
