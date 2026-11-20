@@ -52,9 +52,16 @@ No browser or wallet pop-up needed. Free; x402Fi takes 0%.
 1. \`GET ${origin}/api/auth/nonce\` returns \`{"nonce"}\` (valid 10 minutes, single use).
 2. Sign an EIP-4361 (Sign-In with Ethereum) message with \`personal_sign\`: domain \`${new URL(origin).host}\`, uri \`${origin}\`, version \`1\`, chainId \`1\`, your address, that nonce. Smart wallets (ERC-1271/6492) work.
 3. \`POST ${origin}/api/auth/verify\` with \`{"message","signature"}\`. It sets an \`x402fi_session\` cookie (7 days).
-4. \`POST ${origin}/api/listings\` with that cookie and \`{"name","summary","category","upstreamUrl","payTo","publish":true,"endpoints":[{"method","path","price","exampleRequest","exampleResponse"}]}\`. Answers 201 \`{id, slug, upstreamSecret}\`, or 422 \`{errors}\` by field. Keep \`upstreamSecret\`: paid calls reach your API with it in \`X-X402Fi-Secret\`. If your API already answers with its own x402 402, send \`"native": true\` and no prices or \`payTo\`.
+4. \`POST ${origin}/api/listings\` with that cookie and \`{"name","summary","description","category","upstreamUrl","payTo","dailyCap","identityName","logoUrl","websiteUrl","xHandle","publish":true,"endpoints":[{"method","path","price","pricing","exampleRequest","exampleBody","exampleResponse"}]}\`. Answers 201 \`{id, slug, upstreamSecret}\`, or 422 \`{errors}\` by field. Keep \`upstreamSecret\`: paid calls reach your API with it in \`X-X402Fi-Secret\`. If your API already answers with its own x402 402, send \`"native": true\` and no prices or \`payTo\`. \`logoUrl\` is an https:// or ipfs:// image.
 
-Full example, field limits and categories: [List from code](${origin}/developers#list-from-code).
+Optional steps, same as the wizard:
+
+- Name: a HoodFi name (\`yourname.hoodfi.eth\`, Robinhood Chain only). Check it with \`GET ${origin}/api/names/suggest?label=yourname\`, buy it by paying the 402 of \`POST ${origin}/g/hoodfi-names/register/yourname\` (the name goes to the paying wallet, which must be the signed-in one), write its payee records in one Robinhood Chain transaction, confirm with \`GET ${origin}/api/names/check?name=…&payTo=…\`, then send \`identityName\`. x402 Identity names are minted on Ethereum and are offered in the wizard only.
+- Test: \`POST ${origin}/api/listings/check-upstream\` with \`{"url","method"}\` calls your endpoint once, unpaid.
+- Review: after publishing, \`POST ${origin}/api/reviews\` with \`{"listingId","contact","repoUrl","commit","note"}\` asks HEY Research Lab to review your endpoints.
+- Later: \`PATCH ${origin}/api/listings/{id}\` changes the logo, website, X handle, status, payout wallet or payee name, or rotates the secret.
+
+Everything above in one runnable script: [scripts/list-from-code.mjs](https://github.com/RWA-ID/x402fi/blob/main/scripts/list-from-code.mjs). Full example, field limits and categories: [List from code](${origin}/developers#list-from-code).
 
 ## For developers
 

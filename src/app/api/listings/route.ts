@@ -10,6 +10,7 @@ import { validateService } from "@/lib/server/services";
 import { sellerHoldsNameError } from "@/lib/server/nameHolder";
 import { listingScanMode, listingTextFields, rescanListing } from "@/lib/server/textscan";
 import { blockErrors, scanFields, serviceBlockErrors } from "@/lib/textscan";
+import { parseProfileFields } from "@/lib/profile";
 
 const MAX_ENDPOINTS = 20;
 
@@ -36,7 +37,10 @@ export async function GET() {
 export async function POST(req: Request) {
   const seller = await currentSeller();
   if (!seller) return Response.json({ error: "Sign in first." }, { status: 401 });
-  const input = (await req.json()) as ListingInput & { publish?: boolean; native?: boolean; exampleBody?: string | null; endpoints?: EndpointInput[] };
+  const input = (await req.json()) as ListingInput & { publish?: boolean; native?: boolean; exampleBody?: string | null; endpoints?: EndpointInput[]; logoUrl?: string | null; websiteUrl?: string | null; xHandle?: string | null };
+  // Optional profile (logo, website, X), so an agent publishing from code needs no second call.
+  const profile = parseProfileFields(input);
+  if (!profile.ok) return Response.json({ errors: profile.errors }, { status: 422 });
 
   // Endpoints from the wizard (2026-11): several in one publish. Without them, the old
   // single-endpoint shape still works (one endpoint at "/", every path).
@@ -149,7 +153,7 @@ export async function POST(req: Request) {
   }
   const id = crypto.randomUUID();
   const upstreamSecret = randomToken();
-  const listingRow = d.insert(listings).values({ id, slug, seller, upstreamSecret, status: input.publish ? "live" : "draft", ...v.value });
+  const listingRow = d.insert(listings).values({ id, slug, seller, upstreamSecret, status: input.publish ? "live" : "draft", ...v.value, ...profile.value });
   if (rows.length) {
     await d.batch([listingRow, ...rows.map((r) => d.insert(services).values({ ...r, id: crypto.randomUUID(), listingId: id } as typeof services.$inferInsert))]);
     await rescanListing(id);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseXHandle, parseWebsite, parseLogo, mergeProfile, logoCandidates, IPFS_GATEWAYS } from "@/lib/profile";
+import { parseXHandle, parseWebsite, parseLogo, parseProfileFields, mergeProfile, logoCandidates, IPFS_GATEWAYS } from "@/lib/profile";
 
 describe("parseXHandle", () => {
   it("accepts handles and profile links", () => {
@@ -51,5 +51,23 @@ describe("mergeProfile", () => {
   it("drops invalid values instead of rendering them", () => {
     const p = mergeProfile({ url: "javascript:alert(1)" }, { websiteUrl: "http://insecure.example" });
     expect(p.website).toBeNull();
+  });
+});
+
+describe("parseProfileFields (publish from code)", () => {
+  it("parses logo, website and X handle like PATCH does", () => {
+    expect(parseProfileFields({ logoUrl: " ipfs://bafyabc/logo.png ", websiteUrl: "agentminimum.com", xHandle: "@mva_agent" })).toEqual({
+      ok: true, value: { logoUrl: "ipfs://bafyabc/logo.png", websiteUrl: "https://agentminimum.com/", xHandle: "mva_agent" },
+    });
+  });
+
+  it("leaves absent fields null", () => {
+    expect(parseProfileFields({})).toEqual({ ok: true, value: { logoUrl: null, websiteUrl: null, xHandle: null } });
+  });
+
+  it("names every bad field", () => {
+    const r = parseProfileFields({ logoUrl: "http://acme.com/logo.png", websiteUrl: "ok.com", xHandle: "not a handle!" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(Object.keys(r.errors).sort()).toEqual(["logoUrl", "xHandle"]);
   });
 });

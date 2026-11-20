@@ -114,15 +114,59 @@ const r = await fetch(X + "/api/listings", {
     category: "Market data",                    // see the list below
     upstreamUrl: "https://api.acme.com",        // can't be changed after publishing
     payTo: "0xYourPayoutWallet",                // on Robinhood Chain
+    dailyCap: "50",                             // optional: max USDG of sales per UTC day, then 429
+    identityName: "acme.hoodfi.eth",            // optional: your payee name (see Name below)
+    logoUrl: "https://acme.com/logo.png",       // optional: https:// or ipfs:// image, square works best
+    websiteUrl: "https://acme.com",             // optional
+    xHandle: "@acme",                           // optional
     publish: true,
     endpoints: [                                // up to 20; at least one paid
       { method: "GET", path: "/rates", price: "0.01",
         exampleRequest: "?pair=EURUSD", exampleResponse: '{"pair":"EURUSD","rate":1.08}' },
+      { method: "POST", path: "/convert", price: "0.02",
+        exampleBody: '{"from":"EUR","to":"USD","amount":100}' },
     ],
   }),
 });
 const out = await r.json();       // 201 { id, slug, upstreamSecret }; 422 { errors: { field: message } }
 // Keep upstreamSecret: paid calls reach your API with it in X-X402Fi-Secret.`;
+
+const listName = `// Name (optional): a HoodFi name, all on Robinhood Chain. npm install @x402identity/widget-core
+// 1. Is it free, and what does it cost?   (4+ characters: $3 USDG)
+GET  /api/names/suggest?label=acme        → { suggestions: [{ label, hoodfi: { available, priceAtomic } }] }
+
+// 2. Register it: an ordinary x402 purchase from the HoodFi Names listing.
+//    The name goes to the wallet that pays, which must be the wallet you signed in with.
+POST /g/hoodfi-names/register/acme        → 402, pay it like any endpoint (see Paying safely)
+
+// 3. Point it at your listing: ONE transaction to the HoodFi registry (ETH gas on Robinhood Chain).
+const REGISTRY = "0xf2bABA012244bdD7445129597350054E1B3aEe5C";      // also the resolver
+const node = namehash("acme.hoodfi.eth");
+const plan = planPayeeRecords(
+  ["https://x402fi.dev"],                       // a native listing: your own origin instead
+  [{ network: "eip155:4663", payTo: "0xYourPayoutWallet" }],
+);                                              // merge any origins / payto already on the name
+await wallet.writeContract({ address: REGISTRY, abi: multicallAbi, functionName: "multicall",
+  args: [buildPayeeCalls(node, plan)] });       // check the receipt: a revert does not throw
+
+// 4. Check it, then publish with identityName (or PATCH it onto a live listing).
+GET  /api/names/check?name=acme.hoodfi.eth&payTo=0x…[&upstream=https://api.acme.com]
+                                          → { state: "verified" | "mismatch" | "unknown", reasonText }`;
+
+const listTestReview = `// Test (optional, before publishing): call one endpoint once, unpaid.
+POST /api/listings/check-upstream   { "url": "https://api.acme.com/rates?pair=EURUSD", "method": "GET" }
+                                  → { ok, status, ms, contentType, sample }
+
+// Review (optional, after publishing): ask HEY Research Lab to review your endpoints.
+POST /api/reviews   { "listingId": "<id from publish>", "contact": "you@acme.com or @acme",
+                      "repoUrl": "https://github.com/acme/api", "commit": "<hash>", "note": "…",
+                      "endpointKeys": ["GET /rates"] }    // optional: all live endpoints by default
+                  → { ok, requested, skipped }
+
+// Later, with the same session:
+GET   /api/listings                     your listings
+PATCH /api/listings/{id}                { logoUrl, websiteUrl, xHandle, status: "live" | "paused",
+                                          payTo, identityName, rotateSecret: true }   // send only what changes`;
 
 const payeeExt = `// Name the payee in your 402 so agents can verify you (x402 payee-name extension)
 "extensions": { "payee-name": { "info": { "name": "yourco.402api.eth" } } }
@@ -165,20 +209,29 @@ export default function Developers() {
       </Section>
 
       <Section id="list-from-code" title="List from code">
-        <p>An agent or a script can list itself without the wizard. Sign-in is a standard Sign-In with Ethereum (EIP-4361) message that any wallet able to <code className="font-mono">personal_sign</code> can sign, including smart wallets (ERC-1271/6492). It is free and moves nothing. The session is an <code className="font-mono">x402fi_session</code> cookie that lasts 7 days; send it with the publish call. The payout wallet does not have to be the wallet that signs in.</p>
-        <ul className="mt-3 space-y-1 font-mono text-sm">
-          <li>GET  /api/auth/nonce</li>
-          <li>POST /api/auth/verify</li>
-          <li>POST /api/listings</li>
-        </ul>
+        <p>An agent or a script can do everything the <a className="underline" href="/sell/new">listing wizard</a> does, with no browser and no wallet pop-up: Service and Endpoints, Name, Test, Review and Publish. Sign-in is a standard Sign-In with Ethereum (EIP-4361) message that any wallet able to <code className="font-mono">personal_sign</code> can sign, including smart wallets (ERC-1271/6492). It is free and moves nothing. The session is an <code className="font-mono">x402fi_session</code> cookie that lasts 7 days; send it with every call below. The payout wallet does not have to be the wallet that signs in.</p>
+        <p className="mt-3">
+          All of it in one runnable script:{" "}
+          <a className="font-mono underline" href="https://github.com/RWA-ID/x402fi/blob/main/scripts/list-from-code.mjs" target="_blank" rel="noopener noreferrer">scripts/list-from-code.mjs</a>
+          . Give it your listing as JSON; <code className="font-mono">DRY_RUN=1</code> runs only the read-only checks.
+        </p>
+
+        <h3 className="mt-8 font-mono text-lg text-ink">Sign in, Service, Endpoints, Publish</h3>
         <Code>{listFromCode}</Code>
         <ul className="mt-4 list-disc space-y-2 pl-5 text-sm">
           <li><strong className="text-ink">Categories:</strong> Market data, AI &amp; agents, Research, Compliance &amp; KYB, Data feeds, Developer tools, Other.</li>
-          <li><strong className="text-ink">Prices</strong> are in USDG, from $0.01 to $1,000 per call. Add <code className="font-mono">&quot;pricing&quot;: &quot;free&quot;</code> to an endpoint to forward it without payment.</li>
+          <li><strong className="text-ink">Prices</strong> are in USDG, from $0.01 to $1,000 per call. Add <code className="font-mono">&quot;pricing&quot;: &quot;free&quot;</code> to an endpoint to forward it without payment. A POST endpoint&apos;s <code className="font-mono">exampleBody</code> is the JSON buyers see and Try it sends.</li>
           <li><strong className="text-ink">Already serve your own x402 402?</strong> Send <code className="font-mono">&quot;native&quot;: true</code> and leave out prices and <code className="font-mono">payTo</code>: x402Fi reads them from your 402 and only lists you.</li>
-          <li><strong className="text-ink">A payee name</strong> (<code className="font-mono">identityName</code>) is optional. It must be an ENS name the signed-in wallet holds. For agents to verify it, set its <a className="underline" href="#payee">payee records</a>.</li>
-          <li>Publishing makes the listing live straight away. <code className="font-mono">GET /api/listings</code> lists yours, and <code className="font-mono">PATCH /api/listings/&#123;id&#125;</code> edits one, with the same session.</li>
+          <li>Leave out <code className="font-mono">publish</code> to save a draft instead of going live.</li>
         </ul>
+
+        <h3 className="mt-8 font-mono text-lg text-ink">Name (optional)</h3>
+        <p className="mt-2">A payee name lets buyers check onchain that this service and this wallet are yours, and gives your listing the <strong className="text-ink">Verified payee</strong> badge. From code, use a <strong className="text-ink">HoodFi name</strong> (<span className="font-mono">yourname.hoodfi.eth</span>): it is bought with USDG over x402 and set up in one Robinhood Chain transaction, so nothing touches Ethereum mainnet. The name must be held by the wallet you signed in with. x402 Identity names (<span className="font-mono">.402api.eth</span> and others) are minted on Ethereum, so they are offered in the wizard only.</p>
+        <Code>{listName}</Code>
+
+        <h3 className="mt-8 font-mono text-lg text-ink">Test and Review (optional)</h3>
+        <Code>{listTestReview}</Code>
+        <p className="mt-3 text-sm">A review request needs a contact (3 to 200 characters); the repository link must be https and the commit a 7 to 64 character hex hash. The listing is live either way, and shows &quot;Review in progress&quot; until HEY Research Lab signs off.</p>
       </Section>
 
       <Section id="facilitator" title="Facilitator">

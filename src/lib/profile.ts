@@ -55,6 +55,26 @@ export function parseLogo(input: string | null | undefined, ipfsGateway = "https
 }
 
 /**
+ * The profile fields a publish call may carry (logo, website, X), parsed as PATCH parses them.
+ * Field → message on bad input, so a 422 says which one. The logo is stored as entered
+ * (validated); parseLogo maps ipfs:// at display time.
+ */
+export function parseProfileFields(i: { logoUrl?: string | null; websiteUrl?: string | null; xHandle?: string | null }):
+  | { ok: true; value: { logoUrl: string | null; websiteUrl: string | null; xHandle: string | null } }
+  | { ok: false; errors: Record<string, string> } {
+  const errors: Record<string, string> = {};
+  const one = <T,>(field: string, f: () => T): T | null => {
+    try { return f(); } catch (e) { if (e instanceof ProfileInputError) { errors[field] = e.message; return null; } throw e; }
+  };
+  const value = {
+    logoUrl: one("logoUrl", () => (parseLogo(i.logoUrl) ? (i.logoUrl ?? "").trim() : null)),
+    websiteUrl: one("websiteUrl", () => parseWebsite(i.websiteUrl)),
+    xHandle: one("xHandle", () => parseXHandle(i.xHandle)),
+  };
+  return Object.keys(errors).length ? { ok: false, errors } : { ok: true, value };
+}
+
+/**
  * Gateways tried in order for an ipfs:// logo. One public gateway is not enough:
  * ipfs.io answered 429 for a HoodFi avatar on 2026-11-15, so the logo vanished.
  * Our own gateway holds HoodFi pins but refuses CIDs it did not pin, hence a chain.
