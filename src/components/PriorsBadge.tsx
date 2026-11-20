@@ -11,10 +11,10 @@ export function PriorsBadge({ record }: { record: PriorsRecord }) {
   const title = record.defaulted ? "Defaulted on a Priors loan" : record.verdict === "repaid" ? "Priors credit record" : "On Priors, no repayments yet";
   return (
     <div className="card p-4 text-sm">
-      <div className={`flex items-center gap-2 font-medium ${tone}`}>
+      <div className={`flex items-center gap-3 text-base font-medium ${tone}`}>
         {/* Priors' own mark, unaltered (priors.trade/logo.svg). */}
         {/* eslint-disable-next-line @next/next/no-img-element -- a 1 KB static SVG */}
-        <img src="/partners/priors.svg" alt="Priors" width={20} height={20} className="h-5 w-5 shrink-0 rounded-[5px]" />
+        <img src="/partners/priors.svg" alt="Priors" width={36} height={36} className="h-9 w-9 shrink-0 rounded-[8px]" />
         {title}
       </div>
       <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
