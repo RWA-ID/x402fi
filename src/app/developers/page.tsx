@@ -82,6 +82,48 @@ const text = new TextDecoder().decode(bytes);
 const body = (() => { try { return JSON.parse(text); } catch { return text; } })();
 if (inspectQuoteText(body).decision === "refuse") throw new Error("paid response carries injected text");`;
 
+const listFromCode = `// List a service from code: no browser, no wallet pop-up. npm install viem
+import { createSiweMessage } from "viem/siwe";
+import { privateKeyToAccount } from "viem/accounts";
+
+const X = "https://x402fi.dev";
+const account = privateKeyToAccount(process.env.SELLER_KEY);   // or any viem account
+
+// 1. Sign in: a standard EIP-4361 (SIWE) message. Free, moves nothing.
+const { nonce } = await (await fetch(X + "/api/auth/nonce")).json();    // valid 10 min, single use
+const message = createSiweMessage({
+  domain: "x402fi.dev", uri: X, version: "1", chainId: 1,
+  address: account.address, nonce,
+  statement: "Sign in to x402Fi. This does not cost anything or move funds.",
+});
+const signature = await account.signMessage({ message });                // personal_sign
+const login = await fetch(X + "/api/auth/verify", {
+  method: "POST", headers: { "content-type": "application/json" },
+  body: JSON.stringify({ message, signature }),
+});
+if (!login.ok) throw new Error((await login.json()).error);
+const cookie = login.headers.get("set-cookie").split(";")[0];            // x402fi_session, 7 days
+
+// 2. Publish.
+const r = await fetch(X + "/api/listings", {
+  method: "POST", headers: { "content-type": "application/json", cookie },
+  body: JSON.stringify({
+    name: "Acme Rates",                         // 3-60 characters
+    summary: "Live FX rates for 40 currency pairs.",   // 10-140 characters
+    description: "",                            // optional, up to 2,000
+    category: "Market data",                    // see the list below
+    upstreamUrl: "https://api.acme.com",        // can't be changed after publishing
+    payTo: "0xYourPayoutWallet",                // on Robinhood Chain
+    publish: true,
+    endpoints: [                                // up to 20; at least one paid
+      { method: "GET", path: "/rates", price: "0.01",
+        exampleRequest: "?pair=EURUSD", exampleResponse: '{"pair":"EURUSD","rate":1.08}' },
+    ],
+  }),
+});
+const out = await r.json();       // 201 { id, slug, upstreamSecret }; 422 { errors: { field: message } }
+// Keep upstreamSecret: paid calls reach your API with it in X-X402Fi-Secret.`;
+
 const payeeExt = `// Name the payee in your 402 so agents can verify you (x402 payee-name extension)
 "extensions": { "payee-name": { "info": { "name": "yourco.402api.eth" } } }
 
@@ -120,6 +162,23 @@ export default function Developers() {
       <Section id="gateway" title="Behind the gateway">
         <p>Paid calls reach your API with two extra headers: <code className="font-mono">X-X402Fi-Secret</code> (from your listing) and <code className="font-mono">X-X402Fi-Payer</code>. Check the secret so the paywall can&apos;t be bypassed. A forwarded call has been checked (signature, amount, balance, and the funds are reserved against the buyer&apos;s other calls in flight) but it is settled only after your API answers 2xx. The gateway sets both headers itself and drops any <code className="font-mono">X-X402Fi-*</code> header a caller sends.</p>
         <Code>{verifySecret}</Code>
+      </Section>
+
+      <Section id="list-from-code" title="List from code">
+        <p>An agent or a script can list itself without the wizard. Sign-in is a standard Sign-In with Ethereum (EIP-4361) message that any wallet able to <code className="font-mono">personal_sign</code> can sign, including smart wallets (ERC-1271/6492). It is free and moves nothing. The session is an <code className="font-mono">x402fi_session</code> cookie that lasts 7 days; send it with the publish call. The payout wallet does not have to be the wallet that signs in.</p>
+        <ul className="mt-3 space-y-1 font-mono text-sm">
+          <li>GET  /api/auth/nonce</li>
+          <li>POST /api/auth/verify</li>
+          <li>POST /api/listings</li>
+        </ul>
+        <Code>{listFromCode}</Code>
+        <ul className="mt-4 list-disc space-y-2 pl-5 text-sm">
+          <li><strong className="text-ink">Categories:</strong> Market data, AI &amp; agents, Research, Compliance &amp; KYB, Data feeds, Developer tools, Other.</li>
+          <li><strong className="text-ink">Prices</strong> are in USDG, from $0.01 to $1,000 per call. Add <code className="font-mono">&quot;pricing&quot;: &quot;free&quot;</code> to an endpoint to forward it without payment.</li>
+          <li><strong className="text-ink">Already serve your own x402 402?</strong> Send <code className="font-mono">&quot;native&quot;: true</code> and leave out prices and <code className="font-mono">payTo</code>: x402Fi reads them from your 402 and only lists you.</li>
+          <li><strong className="text-ink">A payee name</strong> (<code className="font-mono">identityName</code>) is optional. It must be an ENS name the signed-in wallet holds. For agents to verify it, set its <a className="underline" href="#payee">payee records</a>.</li>
+          <li>Publishing makes the listing live straight away. <code className="font-mono">GET /api/listings</code> lists yours, and <code className="font-mono">PATCH /api/listings/&#123;id&#125;</code> edits one, with the same session.</li>
+        </ul>
       </Section>
 
       <Section id="facilitator" title="Facilitator">

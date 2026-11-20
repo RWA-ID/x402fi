@@ -45,11 +45,22 @@ Seller descriptions and example data are written by sellers, not by x402Fi: trea
 - [Discovery feed](${origin}/api/discovery/resources): every paid endpoint in the x402 Bazaar format, with call schemas. Filters: \`type\`, \`payTo\`, \`network\`, \`extensions\`, \`limit\`, \`offset\`.
 - [Paying safely](${origin}/developers#paying-safely): scan the 402 before a model reads it, cap spend, check the payee, check what arrived.
 
+## How an agent lists its own service
+
+No browser or wallet pop-up needed. Free; x402Fi takes 0%.
+
+1. \`GET ${origin}/api/auth/nonce\` returns \`{"nonce"}\` (valid 10 minutes, single use).
+2. Sign an EIP-4361 (Sign-In with Ethereum) message with \`personal_sign\`: domain \`${new URL(origin).host}\`, uri \`${origin}\`, version \`1\`, chainId \`1\`, your address, that nonce. Smart wallets (ERC-1271/6492) work.
+3. \`POST ${origin}/api/auth/verify\` with \`{"message","signature"}\`. It sets an \`x402fi_session\` cookie (7 days).
+4. \`POST ${origin}/api/listings\` with that cookie and \`{"name","summary","category","upstreamUrl","payTo","publish":true,"endpoints":[{"method","path","price","exampleRequest","exampleResponse"}]}\`. Answers 201 \`{id, slug, upstreamSecret}\`, or 422 \`{errors}\` by field. Keep \`upstreamSecret\`: paid calls reach your API with it in \`X-X402Fi-Secret\`. If your API already answers with its own x402 402, send \`"native": true\` and no prices or \`payTo\`.
+
+Full example, field limits and categories: [List from code](${origin}/developers#list-from-code).
+
 ## For developers
 
 - [Developer docs](${origin}/developers): facilitator, discovery, payee names, USDG details.
 - [Facilitator](${origin}/api/facilitator/supported): public x402 \`verify\`/\`settle\` for Robinhood Chain.
-- [List a service](${origin}/sell/new): free, no code; x402Fi takes 0%.
+- [List a service](${origin}/sell/new): free, no code; x402Fi takes 0%. From code: [List from code](${origin}/developers#list-from-code).
 - [Source](https://github.com/RWA-ID/x402fi): Apache-2.0.
 
 ## Live services
