@@ -53,6 +53,8 @@ describe("Try it fields", () => {
     const f = tryFields({ symbol: "AAPL", sizeUsdg: "1000" });
     expect(buildTryUrl("stockfi-trade", "/v1/preflight/quote", f, { symbol: " TSLA ", sizeUsdg: "250" })).toBe("/g/stockfi-trade/v1/preflight/quote?symbol=TSLA&sizeUsdg=250");
     expect(buildTryUrl("stockfi-trade", "/v1/preflight/quote", f, { symbol: "TSLA", sizeUsdg: "" })).toBe("/g/stockfi-trade/v1/preflight/quote?symbol=TSLA");
+    // A native listing's Try it goes through its own route; only the query comes from the visitor.
+    expect(buildTryUrl("mva-roast", "", f, { symbol: "TSLA", sizeUsdg: "" }, "/api/try-native/abc")).toBe("/api/try-native/abc?symbol=TSLA");
     expect(buildTryUrl("x", "", [], {})).toBe("/g/x");
   });
 });

@@ -72,12 +72,13 @@ export function formatBytes(n: number): string {
 }
 
 /** `/g/<slug><path>?<the visitor's values>`; empty values are dropped. */
-export function buildTryUrl(slug: string, path: string, fields: TryField[], values: Record<string, string>): string {
+/** `base`: where the call goes; the x402Fi gateway unless a native listing passes its Try it route. */
+export function buildTryUrl(slug: string, path: string, fields: TryField[], values: Record<string, string>, base = `/g/${slug}`): string {
   const q = new URLSearchParams();
   for (const f of fields) {
     const v = (values[f.key] ?? "").trim();
     if (v) q.set(f.key, v);
   }
   const s = q.toString();
-  return `/g/${slug}${path}${s ? `?${s}` : ""}`;
+  return `${base}${path}${s ? `?${s}` : ""}`;
 }

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useAccount, useSignTypedData, useSwitchChain } from "wagmi";
 import { useAppKit } from "@reown/appkit/react";
 import { toHex, getAddress } from "viem";
-import { ROBINHOOD_CHAIN_ID, txUrl } from "@/lib/chains";
+import { NETWORK, ROBINHOOD_CHAIN_ID, txUrl, USDG } from "@/lib/chains";
 import { decodeHeader, encodeHeader } from "@/lib/x402/encoding";
 import { transferWithAuthorizationTypes, usdgDomain } from "@/lib/x402/eip712";
 import type { PaymentPayload, PaymentRequired, SettleResponse } from "@/lib/x402/types";
@@ -29,8 +29,11 @@ type Line = { t: string; tone?: "ok" | "bad" | "dim" };
 /**
  * `nameEntry`: a contract endpoint that sells a name. The buyer types it, the URL becomes
  * `/g/<slug><path>/<name>`, and the exact price is shown before the wallet asks to sign.
+ * `native`: the seller runs its own paywall. Calls go through /api/try-native/<serviceId> and the
+ * buyer pays the seller directly; the wallet is only asked to sign if the live 402 pays `payTo`,
+ * the wallet the listing was published with.
  */
-export function TryIt({ slug, method, pathAndQuery, params, exampleBody, acceptsFile, pricing, priceLabel, nameEntry, onPaid, popup = true }: {
+export function TryIt({ slug, method, pathAndQuery, params, exampleBody, acceptsFile, pricing, priceLabel, nameEntry, onPaid, popup = true, native }: {
   slug: string; method: string; pathAndQuery: string; pricing: "free" | "fixed" | "quote" | "contract"; priceLabel: string;
   /** The example's query parameters: each becomes an editable field, pre-filled with the example value. */
   params?: Record<string, string>;
@@ -44,6 +47,7 @@ export function TryIt({ slug, method, pathAndQuery, params, exampleBody, accepts
   onPaid?: (body: unknown) => void;
   /** Open the response in a popup card on success (off for flows that move on by themselves). */
   popup?: boolean;
+  native?: { serviceId: string; payTo: string };
 }) {
   const [name, setName] = useState(nameEntry?.initial ?? "");
   const [fields] = useState(() => tryFields(params ?? {}));
@@ -94,9 +98,10 @@ export function TryIt({ slug, method, pathAndQuery, params, exampleBody, accepts
     }
     const bodyErr = fileMode ? fileError(file) : hasBody ? jsonBodyError(jsonBody) : null;
     if (bodyErr) { setLog([{ t: bodyErr, tone: "bad" }]); return; }
+    const base = native ? `/api/try-native/${native.serviceId}` : `/g/${slug}`;
     const url = nameEntry
-      ? `/g/${slug}${pathAndQuery}/${encodeURIComponent(name.trim().toLowerCase())}`
-      : fields.length ? buildTryUrl(slug, pathAndQuery, fields, vals) : `/g/${slug}${pathAndQuery}`;
+      ? `${base}${pathAndQuery}/${encodeURIComponent(name.trim().toLowerCase())}`
+      : fields.length ? buildTryUrl(slug, pathAndQuery, fields, vals, base) : `${base}${pathAndQuery}`;
     // A file goes as is, with its own type; otherwise the visitor's JSON (the seller's example to start).
     const init: RequestInit = method !== "POST"
       ? { method }
@@ -126,13 +131,23 @@ export function TryIt({ slug, method, pathAndQuery, params, exampleBody, accepts
         push({ t: `${first.status}${msg ? `: ${msg}` : ""}`, tone: "bad" });
         return;
       }
-      const pr = (await first.json()) as PaymentRequired;
-      const req = pr.accepts[0];
+      // x402 v2 carries the terms in PAYMENT-REQUIRED; some sellers leave the body's accepts empty.
+      const prHeader = first.headers.get("PAYMENT-REQUIRED");
+      const pr = (prHeader ? decodeHeader<PaymentRequired>(prHeader) : await first.json()) as PaymentRequired;
+      // Only ever sign USDG on Robinhood Chain: the signature below is for that token's domain.
+      const req = pr.accepts?.find((a) => a.network === NETWORK && getAddress(a.asset) === getAddress(USDG.address));
+      if (!req) { push({ t: "This endpoint doesn't take USDG on Robinhood Chain, so Try it can't pay it.", tone: "bad" }); return; }
+      if (native && getAddress(req.payTo) !== getAddress(native.payTo)) {
+        push({ t: `Not signed: the seller's 402 now pays ${req.payTo}, not ${native.payTo}, the wallet this listing was published with.`, tone: "bad" });
+        return;
+      }
       const price = formatUsd(req.amount);
       push({ t: nameEntry ? `${name.trim().toLowerCase()}${nameEntry.suffix ?? ""} is available · ${price} USDG` : `402 Payment Required · ${price} USDG to ${req.payTo.slice(0, 8)}…`, tone: "dim" });
       if (chainId !== ROBINHOOD_CHAIN_ID) { push({ t: "Switching wallet to Robinhood Chain…", tone: "dim" }); await switchChainAsync({ chainId: ROBINHOOD_CHAIN_ID }); }
       const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)));
-      const validBefore = BigInt(Math.floor(Date.now() / 1000) + 600);
+      // 10 minutes, or less when a native seller's own 402 asks for a shorter window.
+      const ttl = native && req.maxTimeoutSeconds > 0 ? Math.min(600, req.maxTimeoutSeconds) : 600;
+      const validBefore = BigInt(Math.floor(Date.now() / 1000) + ttl);
       const message = { from: getAddress(address), to: getAddress(req.payTo), value: BigInt(req.amount), validAfter: 0n, validBefore, nonce };
       push({ t: "Asking your wallet to sign (no gas)…", tone: "dim" });
       const signature = await signTypedDataAsync({ domain: usdgDomain, types: transferWithAuthorizationTypes, primaryType: "TransferWithAuthorization", message });

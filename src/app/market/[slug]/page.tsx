@@ -116,7 +116,7 @@ export default async function ListingPage({ params }: P) {
             {live.map((s) => {
               const ex = examplePath(s);
               const nat = probes.get(s.id);
-              if (s.pricing === "native" && nat) return <NativeEndpoint key={s.id} s={s} url={nat.url} probe={nat.probe} />;
+              if (s.pricing === "native" && nat) return <NativeEndpoint key={s.id} s={s} url={nat.url} probe={nat.probe} live={l.status === "live"} payTo={l.payTo} slug={l.slug} />;
               return (
                 <section key={s.id} className="card overflow-hidden">
                   <div className="grid grid-cols-[1fr_auto] items-start gap-4 p-5">
@@ -228,11 +228,13 @@ function ProfileLink({ href, label, verified, icon }: { href: string; label: str
 }
 
 /** A native endpoint: the seller's own x402 URL, paid directly; price and payee read from its 402. */
-function NativeEndpoint({ s, url, probe }: { s: PublicService; url: string; probe: Awaited<ReturnType<typeof probeNative>> }) {
+function NativeEndpoint({ s, url, probe, live, payTo, slug }: { s: PublicService; url: string; probe: Awaited<ReturnType<typeof probeNative>>; live: boolean; payTo: string; slug: string }) {
   const curl = s.method === "GET"
     ? `curl -i "${url}"`
     : `curl -i -X ${s.method} "${url}" \\\n  -H 'content-type: application/json' \\\n  -d '${(s.exampleBody ?? "{}").replace(/'/g, "'\\''")}'`;
   const v1 = probe.ok && probe.quote.x402Version === 1;
+  // Try it pays the seller directly (through /api/try-native): x402 v2 with USDG on Robinhood Chain.
+  const canTry = live && probe.ok && probe.quote.x402Version === 2 && isRobinhoodNetwork(probe.quote.network);
   return (
     <section className="card overflow-hidden">
       <div className="grid grid-cols-[1fr_auto] items-start gap-4 p-5">
@@ -258,6 +260,22 @@ function NativeEndpoint({ s, url, probe }: { s: PublicService; url: string; prob
           <span className="text-warn">Couldn&apos;t read the seller&apos;s price right now ({probe.reason}).</span>
         )}
       </div>
+      {canTry && (
+        <div className="border-t border-line px-5 py-4">
+          <TryIt
+            slug={slug}
+            method={s.method}
+            pathAndQuery=""
+            params={tryPath(s).query}
+            exampleBody={s.exampleBody}
+            acceptsFile={s.acceptsFile}
+            pricing="fixed"
+            priceLabel={formatUsd(probe.quote.amount)}
+            native={{ serviceId: s.id, payTo }}
+          />
+          <p className="mt-2 text-xs text-ink-3">Paid straight to the seller&apos;s wallet; the seller settles it. x402Fi passes the request on and never holds the money.</p>
+        </div>
+      )}
       {s.review && <ReviewBadge review={s.review} serviceId={s.id} />}
     </section>
   );
