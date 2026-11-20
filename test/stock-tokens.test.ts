@@ -19,6 +19,17 @@ describe("slimAssets", () => {
     expect(list).toEqual([{ s: "AAPL", n: "Apple", a: A(1) }, { s: "TSLA", n: "Tesla", a: A(2) }]);
   });
 
+  it("keeps a well-formed ISIN for the logo and drops a malformed one", () => {
+    const list = slimAssets({ assets: [
+      asset("ANT", "Anthropic, PBC Class A Common Stock", A(1), { isin: "US03703U1079" }),
+      asset("BAD", "Bad ISIN", A(2), { isin: "12345" }),
+    ] });
+    expect(list).toEqual([
+      { s: "ANT", n: "Anthropic, PBC Class A Common Stock", a: A(1), i: "US03703U1079" },
+      { s: "BAD", n: "Bad ISIN", a: A(2) },
+    ]);
+  });
+
   it("throws on an unexpected shape, so the route serves its cached copy", () => {
     expect(() => slimAssets({})).toThrow(/no assets array/);
   });
@@ -72,7 +83,12 @@ describe("field matching and logos", () => {
     expect(isTokenAddressKey("wallet")).toBe(false);
   });
 
-  it("builds a Brandfetch ticker URL", () => {
-    expect(logoUrl("BRK.B")).toMatch(/^https:\/\/cdn\.brandfetch\.io\/ticker\/BRK\.B\/w\/64\/h\/64\?c=/);
+  it("builds a Brandfetch ticker URL when there is no ISIN", () => {
+    expect(logoUrl({ s: "BRK.B" })).toMatch(/^https:\/\/cdn\.brandfetch\.io\/ticker\/BRK\.B\/w\/64\/h\/64\?c=/);
+    expect(logoUrl({ s: "X", i: "not-an-isin" })).toMatch(/\/ticker\/X\//);
+  });
+
+  it("prefers the ISIN (a new IPO's ticker comes back blank)", () => {
+    expect(logoUrl({ s: "ANT", i: "US03703U1079" })).toMatch(/^https:\/\/cdn\.brandfetch\.io\/isin\/US03703U1079\/w\/64\/h\/64\?c=/);
   });
 });

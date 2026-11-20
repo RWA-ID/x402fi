@@ -16,8 +16,9 @@ export function useStockTokens(enabled: boolean): StockToken[] | null {
   return list;
 }
 
-/** Brandfetch logo by ticker; a ticker-letter badge if it does not load. */
-export function TokenLogo({ symbol, size = 20 }: { symbol: string; size?: number }) {
+/** Brandfetch logo (by ISIN, else ticker); a ticker-letter badge if it does not load. */
+export function TokenLogo({ token, size = 20 }: { token: StockToken; size?: number }) {
+  const symbol = token.s;
   const [failed, setFailed] = useState(false);
   const style = { width: size, height: size };
   if (failed) {
@@ -28,7 +29,7 @@ export function TokenLogo({ symbol, size = 20 }: { symbol: string; size?: number
     );
   }
   // eslint-disable-next-line @next/next/no-img-element -- hotlinked by design (Brandfetch serves browsers only)
-  return <img src={logoUrl(symbol)} alt="" width={size} height={size} style={style} className="shrink-0 rounded-full bg-white object-contain" loading="lazy" onError={() => setFailed(true)} />;
+  return <img src={logoUrl(token)} alt="" width={size} height={size} style={style} className="shrink-0 rounded-full bg-white object-contain" loading="lazy" onError={() => setFailed(true)} />;
 }
 
 /**
@@ -63,7 +64,7 @@ export function TokenField({ mode, list, id, value, onChange, onBlur, invalid, d
             return (
               <button key={t.s} type="button" onClick={() => choose(t)} aria-pressed={on} title={t.n}
                 className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 font-mono text-xs ${on ? "border-ink bg-ink text-bg" : "border-line text-ink-2 hover:border-ink-3 hover:text-ink"}`}>
-                <TokenLogo symbol={t.s} size={18} />
+                <TokenLogo token={t} size={18} />
                 {t.s}
               </button>
             );
@@ -72,7 +73,7 @@ export function TokenField({ mode, list, id, value, onChange, onBlur, invalid, d
       )}
       <div className="relative">
         {selected && (
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><TokenLogo symbol={selected.s} size={20} /></span>
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2"><TokenLogo token={selected} size={20} /></span>
         )}
         <input
           id={id}
@@ -110,7 +111,7 @@ export function TokenField({ mode, list, id, value, onChange, onBlur, invalid, d
                 onMouseDown={(e) => { e.preventDefault(); if (blurTimer.current) clearTimeout(blurTimer.current); choose(t); }}
                 onMouseEnter={() => setActive(i)}
                 className={`flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-sm ${i === active ? "bg-card" : ""}`}>
-                <TokenLogo symbol={t.s} size={22} />
+                <TokenLogo token={t} size={22} />
                 <span className="w-14 shrink-0 font-mono font-medium">{t.s}</span>
                 <span className="min-w-0 truncate text-ink-2">{t.n}</span>
               </li>

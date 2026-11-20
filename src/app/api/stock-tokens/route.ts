@@ -1,5 +1,5 @@
 /**
- * The Robinhood Stock Token list for Try it's ticker search: [{ s, n, a }].
+ * The Robinhood Stock Token list for Try it's ticker search: [{ s, n, a, i? }].
  * Robinhood's API sends no CORS headers, so the browser asks us. Cached in the isolate for
  * 10 minutes (a stale copy is served for up to a day if Robinhood is down) and at the edge.
  */

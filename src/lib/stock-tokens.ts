@@ -13,6 +13,8 @@ export interface StockToken {
   n: string;
   /** EIP-55 contract address on Robinhood Chain. */
   a: string;
+  /** ISIN, when Robinhood lists one. Used for the logo. */
+  i?: string;
 }
 
 export interface StockPrice {
@@ -36,8 +38,17 @@ export const QUICK_PICKS = ["AAPL", "TSLA", "NVDA", "MSFT", "AMZN", "GOOGL", "ME
  */
 export const BRANDFETCH_CLIENT_ID = "1idCGSZnaFL2hkG7DtD";
 
-export function logoUrl(symbol: string): string {
-  return `https://cdn.brandfetch.io/ticker/${encodeURIComponent(symbol)}/w/64/h/64?c=${BRANDFETCH_CLIENT_ID}`;
+const ISIN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+
+/**
+ * Logo by ISIN when there is one, else by ticker. Brandfetch's ticker lookup returns a BLANK
+ * image (not an error, so onError never fires) for tickers it has not mapped yet, e.g. a new
+ * IPO like ANT on its first day, while the ISIN lookup already knows the company. Checked
+ * 2026-11-19 across all 204 tokens: ISIN matched or beat the ticker logo on every one.
+ */
+export function logoUrl(token: { s: string; i?: string }): string {
+  const path = token.i && ISIN.test(token.i) ? `isin/${token.i}` : `ticker/${encodeURIComponent(token.s)}`;
+  return `https://cdn.brandfetch.io/${path}/w/64/h/64?c=${BRANDFETCH_CLIENT_ID}`;
 }
 
 export const SYMBOL = /^[A-Z0-9.]{1,12}$/;
@@ -52,7 +63,8 @@ export function slimAssets(json: unknown): StockToken[] {
     const dep = (x.deployments as Array<{ chainId?: number; contractAddress?: string }> | undefined)?.find((d) => d.chainId === ROBINHOOD_CHAIN_ID);
     if (!dep?.contractAddress || !/^0x[0-9a-fA-F]{40}$/.test(dep.contractAddress)) continue;
     const name = typeof x.tokenName === "string" ? x.tokenName.replace(/\s*•\s*Robinhood Token\s*$/i, "").trim() : "";
-    out.push({ s: x.tokenSymbol.toUpperCase(), n: name || x.tokenSymbol, a: dep.contractAddress });
+    const isin = typeof x.isin === "string" ? x.isin.trim().toUpperCase() : "";
+    out.push({ s: x.tokenSymbol.toUpperCase(), n: name || x.tokenSymbol, a: dep.contractAddress, ...(ISIN.test(isin) ? { i: isin } : {}) });
   }
   return out.sort((p, q) => p.s.localeCompare(q.s));
 }
