@@ -25,6 +25,6 @@
   "active": true,
   "supportedTrust": [],
   "registrations": [
-    { "agentId": null, "agentRegistry": "eip155:4663:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432" }
+    { "agentId": 26268, "agentRegistry": "eip155:4663:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432" }
   ]
 }
