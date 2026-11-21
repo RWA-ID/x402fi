@@ -1,0 +1,30 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "x402Fi",
+  "description": "The x402 marketplace on Robinhood Chain (eip155:4663). Find paid HTTP APIs priced per call in USDG, with verified payees and receipts. The MCP server searches listings and returns the exact x402 payment requirements for a request; it never pays, holds funds or calls a paid endpoint. Sellers list any API for free. Name: x402fi.eth.",
+  "image": "https://x402fi.dev/icon-512.png",
+  "services": [
+    { "name": "web", "endpoint": "https://x402fi.dev/" },
+    {
+      "name": "MCP",
+      "version": "2025-06-18",
+      "endpoint": "https://x402fi.dev/mcp",
+      "mcpTools": ["search_services", "get_listing", "get_payment_requirements"],
+      "capabilities": ["tools"]
+    },
+    {
+      "name": "x402-discovery",
+      "endpoint": "https://x402fi.dev/api/discovery/resources",
+      "description": "x402 discovery feed of every listed endpoint, with its 402 payment requirements."
+    },
+    { "name": "llms.txt", "endpoint": "https://x402fi.dev/llms.txt" },
+    { "name": "agentWallet", "endpoint": "eip155:4663:0x0104c88Ea4f55c26df89F5cd3eC62F3C8288D69b" },
+    { "name": "ENS", "version": "v1", "endpoint": "x402fi.eth" }
+  ],
+  "x402Support": true,
+  "active": true,
+  "supportedTrust": [],
+  "registrations": [
+    { "agentId": null, "agentRegistry": "eip155:4663:0x8004A169FB4a3325136EB29fA0ceB6D2e539a432" }
+  ]
+}
