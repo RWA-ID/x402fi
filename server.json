@@ -1,0 +1,11 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.x402fi/x402fi",
+  "title": "x402Fi",
+  "description": "Find paid x402 APIs on Robinhood Chain and get the exact USDG payment for a call. Never pays.",
+  "version": "0.1.0",
+  "websiteUrl": "https://x402fi.dev",
+  "repository": { "url": "https://github.com/RWA-ID/x402fi", "source": "github" },
+  "icons": [{ "src": "https://x402fi.dev/icon-512.png", "mimeType": "image/png", "sizes": ["512x512"] }],
+  "remotes": [{ "type": "streamable-http", "url": "https://x402fi.dev/mcp" }]
+}
