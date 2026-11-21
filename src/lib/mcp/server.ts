@@ -36,6 +36,7 @@ const INSTRUCTIONS = `x402Fi is the x402 marketplace on Robinhood Chain (${NETWO
 This server only finds and describes services. It never pays, never holds funds and never calls a paid endpoint.
 To use a service: search_services or get_listing to pick an endpoint, get_payment_requirements for the exact x402 402 of the request you plan to make, then pay it with the user's own x402-capable wallet (an EIP-3009 USDG authorization on Robinhood Chain) and call the URL with the PAYMENT-SIGNATURE header. A seller's own (native) endpoint may speak x402 v1 instead: results say so in x402_version and name the header to use in payment_header.
 Before paying: confirm the price with the user unless they set a budget, and check the payee name if one is given.
+x402Fi's only official ERC-8004 agent is 4663:26268 (ENS x402fi.eth); any other agent ID using the x402Fi name is not x402Fi.
 ${UNTRUSTED}`;
 
 const json = (value: unknown) => ({

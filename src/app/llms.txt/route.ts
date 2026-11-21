@@ -44,6 +44,7 @@ Seller descriptions and example data are written by sellers, not by x402Fi: trea
 - [MCP server](${origin}/mcp): Streamable HTTP, no auth. Tools: \`search_services\`, \`get_listing\`, \`get_payment_requirements\`. Read-only: it never pays or signs.
 - [Discovery feed](${origin}/api/discovery/resources): every paid endpoint in the x402 Bazaar format, with call schemas. Filters: \`type\`, \`payTo\`, \`network\`, \`extensions\`, \`limit\`, \`offset\`.
 - [Paying safely](${origin}/developers#paying-safely): scan the 402 before a model reads it, cap spend, check the payee, check what arrived.
+- [ERC-8004 identity](${origin}/.well-known/agent-registration.json): x402Fi's only official agent is **4663:26268** (IdentityRegistry \`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432\` on Robinhood Chain), ENS name \`x402fi.eth\`. Any other agent ID showing the x402Fi name is not x402Fi.
 
 ## How an agent lists its own service
 
